@@ -1,0 +1,95 @@
+
+
+
+akka streams talk sketch:
+
+1. overview (5-10m)
+    - underlying interface: you don't need to memorize this, but this is what it compiles to
+    - flow: streaming collection, you can transform it with many standard functions: (map, filter, flatten, take, etc)
+    - consume: produceTo(subscriber), foreach
+    - actor subscriber/publisher
+    - builtin streaming TCP via akka io (details here are key)
+    - flow materializer: config is mainly various buffer sizes
+
+2. specific use case
+    - use groupBy and groupWithin
+    - use mapFuture, ideally with something simple/guaranteed to be up
+    - do some in-stream processing
+    - protobuf: send/receive byte streams
+    - no length-prefixed frame decoder
+    - instead use some wrapper protobuf class or something
+
+
+2a. twitter4j
+    - slow. not a good example
+
+2b. redis idea
+    - destination is redis. some number of sets, each op is a multi-insert.
+    - but some reason to do so is needed. can't just throw bytes around
+
+2c. wordcount
+    - start with a single subreddit: Flow(Vector("funny"))
+    - mapFuture (api call) grab listing for top links, all time. mapConcat to get flow of all-time popular article IDs
+    - for each article ID (api call) grab comments (paginated listing)
+        - mapConcat to extract comment bodies
+        - now there is a stream of comment bodies, use conflate to transform to wordcount.
+    - zip stream of wordcounts with slow (5sec tick) stream, write to external source (mapFuture) on tick
+        - adds complexity, could just do it in memory
+
+def topLinks(subreddit: String): Future[LinkListing] = ???
+
+def extractLinks(top: TopPosts): Seq[Link] = ???
+
+def comments(link: Link): Future[CommentListing] = ???
+
+def extractComments(comments: CommentListing): Seq[Comment]
+
+type WordCount = Map[String, Long] 
+
+def countWords(comment: Comment): WordCount = ???
+
+def merge(a: WordCount)(b: WordCount): WordCount = ???
+
+def buildStream(subreddits: Vector[String]): Flow[WordCount] = {
+    Flow(subreddits)
+        .mapFuture(topLinks) // Flow[TopPosts]
+        .mapConcat(extractLinks) // Flow[Link]
+        .mapFuture(comments) // Flow[CommentListing]
+        .mapConcat(extractComments) // Flow[Comment]
+        .conflate(countWords, mergeWordCounts) // Flow[WordCount]
+}
+
+
+case object Tick
+
+def consumeStream(interval: FiniteDuration)(in: Flow[WordCount]): Future[WordCount] = {
+    val out: Agent[WordCount] = Agent(Map.empty[String, Long])
+
+    val ticks = Flow(interval, interval, () => Tick)
+    in.zip(ticks).foreach{ case (wordcount, _) =>
+        out.update(merge(wordcount)) //send update off. would've used reddit but was too lazy
+    }.map( _ => out.get) //foreach returns future[Unit], 
+}
+
+
+
+
+
+    - result is wordcount of all posts of top threads in subreddit
+    = dump that shit into a wordcloud widget for a tangible result
+
+3. components:
+
+3a. input
+    - generate random messages every 10ms
+    - only way to get high volume
+
+3b. transform
+    - ideally, groupBy, groupwithin, conflate
+    - input needs to be a semigroup, for simplicity. 
+    - fuck it, word count: stream URLs in, , group by word, 
+
+3c. output
+
+
+
