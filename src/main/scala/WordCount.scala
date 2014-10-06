@@ -47,7 +47,7 @@ case class Comment(body: String){
 
 object RedditAPI {
   def topLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing] = {
-    val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "100", "t" -> "all")
+    val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "25", "t" -> "all")
     val f = Http(page OK dispatch.as.json4s.Json).map(LinkListing.fromJson(subreddit)(_))
     timedFuture(s"links: r/$subreddit/top")(f)
   }
@@ -116,7 +116,7 @@ object WordCount {
   val wordcount: Store[Map[String, Int]] = new Store(Map.empty[String, Int])(merge)
   val commentcount: Store[Long] = new Store(0L)(_ + _)
 
-  val subreddits = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news", "tifu")
+  val subreddits = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news")
 
   def main(args: Array[String]): Unit = {
 
