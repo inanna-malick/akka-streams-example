@@ -1,4 +1,4 @@
-
+package main
 
 import akka.actor.ActorSystem
 import akka.agent.Agent
@@ -6,11 +6,13 @@ import akka.stream.{MaterializerSettings, FlowMaterializer}
 import akka.stream.scaladsl.Flow
 import org.json4s.JsonAST.{JValue, JString}
 
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.collection.immutable._
-
+import Util._
 import dispatch._
+
+import scala.util.{Failure, Success}
 
 object LinkListing {
   def fromJson(subreddit: String)(json: JValue) = {
@@ -30,93 +32,87 @@ object CommentListing {
   }
 }
 case class CommentListing(comments: Seq[Comment])
-case class Comment(body: String)
-
-
-
-object WordCount {
-  implicit val as = ActorSystem()
-  implicit val es = as.dispatcher
-  implicit val mat = FlowMaterializer(MaterializerSettings())
-
-
-
-  case object Tick
-
-  type WordCount = Map[String, Long]
-
+case class Comment(body: String){
   val alpha = (('a' to 'z') ++ ('A' to 'Z')).toSet
 
   def normalize(s: Seq[String]): Seq[String] =
     s.map(_.filter(alpha.contains).map(_.toLower)).filterNot(_.isEmpty)
 
-  def countWords(comment: Comment): WordCount =
-    normalize(comment.body.split(" ").to[Seq])
+  def words: Map[String, Int] =
+    normalize(body.split(" ").to[Seq])
       .groupBy(identity)
       .mapValues(_.length)
+}
 
-
-  def topLinks(subreddit: String): Future[LinkListing] = {
-    //println(s"issue toplinks request for $subreddit")
+object RedditAPI {
+  def topLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing] = {
     val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "25", "t" -> "all")
-    Http(page OK dispatch.as.json4s.Json).map(LinkListing.fromJson(subreddit)(_))
-      .andThen{ case x => println(s"got ${x.map(_.links.length)} toplinks for $subreddit")}
+    val f = Http(page OK dispatch.as.json4s.Json).map(LinkListing.fromJson(subreddit)(_))
+    timedFuture(s"links: r/$subreddit/top")(f)
   }
 
-  def comments(link: Link): Future[CommentListing] = {
-    //println(s"issue comments request for thread ${link.id} in ${link.subreddit}")
+  def comments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing] = {
     val page = url(s"http://www.reddit.com/r/${link.subreddit}/comments/${link.id}.json") <<? Map("depth" -> "25", "limit" -> "2000")
-    Http(page OK dispatch.as.json4s.Json).map(CommentListing.fromJson)
-      .andThen{ case x => println(s"\tgot ${x.map(_.comments.length)} comments for thread ${link.id} in ${link.subreddit}")}
+    val f = Http(page OK dispatch.as.json4s.Json).map(CommentListing.fromJson)
+    timedFuture(s"comments: r/${link.subreddit}/${link.id}/comments")(f)
   }
-
-  def popularWords(w: WordCount): WordCount = {
-    w.filter{ case (_,n) => n >= 1000 }
-  }
-
-  def merge(a: WordCount, b: WordCount): WordCount =
-    a.foldLeft(b){ case (wc, (s, c))  => wc.updated(s, c + wc.getOrElse(s, 0L)) }
-
-  def buildStream(subreddits: Vector[String]): Flow[WordCount] = {
-    Flow(subreddits)
-      .mapFuture(topLinks)
-      .mapConcat(_.links)
-      .mapFuture(comments)
-      .map( c => c.comments.map(countWords).fold(Map(): WordCount)(merge) ) // Flow[WordCount]
-  }
+}
 
 
-  def consumeStreams(in: Seq[Flow[WordCount]]) = {
-    val out = Agent(Map(): WordCount)
-
-    Future.sequence(in.map(consumeStream(1 seconds)(out))).map( _ => out.get)
-  }
-
-  def consumeStream(interval: FiniteDuration)(out: Agent[WordCount])(in: Flow[WordCount]): Future[Unit] = {
-
-
-    val ticks = Flow(interval, interval, () => Tick)
-    in.foreach{ case (wordcount) =>
-      //in.zip(ticks.toPublisher).foreach{ case (wordcount, _) =>
-      println("send off update with total words: " + wordcount.values.sum)
-      out.alter(merge(wordcount, _) ) //send update off. would've used redis but was too lazy
-    } //foreach returns future[Unit],
-  }
-
-  def main(args: Array[String]): Unit = {
-
+object Util {
+  def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
-
-    val subreddits = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit")
-
-    val flows = subreddits.map(s => buildStream(Vector(s)))
-
-    consumeStreams(flows).onComplete{ x =>
-      println(s"${x.map(_.size)} distinct words, ${x.map(_.values.sum)} words, most popular:\n${x.map(popularWords(_))}")
-      val end = System.currentTimeMillis()
-      println(s"total time elapsed: ${end - start}")
-      as.shutdown()
+    println(s"--> send off $name")
+    f.andThen{
+      case Success(_) =>
+        val end = System.currentTimeMillis()
+        println(s"\t<-- completed $name, total time elapsed: ${end - start}")
+      case Failure(ex) =>
+        val end = System.currentTimeMillis()
+        println(s"\t<X> failed $name, total time elapsed: ${end - start}\n$ex")
     }
   }
+}
 
+object WordCount {
+  implicit val as = ActorSystem()
+  implicit val ec = as.dispatcher
+  val settings = MaterializerSettings().withFanOut(16, 32).withBuffer(16, 32)
+  implicit val mat = FlowMaterializer(settings)
+  println(s"settings: $settings")
+
+  //todo: mergeable datastructure
+  def merge(a: Map[String, Int], b: Map[String, Int]): Map[String, Int] =
+    a.foldLeft(b) { case (wc, (s, c)) => wc.updated(s, c + wc.getOrElse(s, 0))}
+
+  val subreddits = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news", "tifu")
+
+  def main(args: Array[String]): Unit = {
+    // agent, accepts sequence of functions T => T, runs them in sequence.
+    // todo: abstract this out into a mockDB class w/ all interactions via Future to make example more concrete
+    val out = Agent(Map.empty[String, Int])
+
+    val f: Future[Unit] =
+      Flow(subreddits) // start with a flow of subreddit names
+      .mapFuture(RedditAPI.topLinks) // for each subreddit name, get a Future[LinkListing] and fold the result into the stream
+      .mapConcat(_.links) // concat a Flow of listings of links into a Flow of links
+      .mapFuture(RedditAPI.comments) // for each link, get a Future[CommentListing] and fold the result into the stream
+      .mapConcat(_.comments) // concat a Flow of comment listings into a flow of comments
+      .map(_.words) // get a wordcount for each
+      .foreach{ wordcount => // fold each wordcount into the result-holder agent
+        // since we're just performing addition for each of N keys order is irrelevant, which is a nice bonus
+        // I'm using an agent here to keep this example in-memory.
+      out.send(merge(wordcount, _))
+     }
+
+    timedFuture("main stream")(f).onComplete{
+      case Success(_) =>
+        //grab and log final agent state
+        val res = out.get()
+        println(s"${res.size} distinct words, ${res.values.sum} words total")
+        as.shutdown()
+      case _ =>
+        as.shutdown()
+    }
+  }
 }
