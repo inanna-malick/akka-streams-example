@@ -12,6 +12,7 @@ import scala.collection.immutable._
 import Util._
 import dispatch._
 
+import scala.io.Source
 import scala.util.{Failure, Success}
 
 object LinkListing {
@@ -74,6 +75,22 @@ object Util {
   }
 }
 
+// jury-rigged value store starting with `zero` and merging in new elements as provided
+case class Store[T](zero: T)(f: (T, T) => T )(implicit val ec: ExecutionContext) {
+  private val store: Agent[T] = Agent(zero)
+
+  // add the wordcount to the current one
+  def update(in: T): Future[Unit] =
+    store.alter(f(_, in)).map( _ => () )
+
+
+  // get the value of `store` after all queued updates have been completed
+  def read: Future[T] =
+    store.future()
+}
+
+
+
 object WordCount {
   implicit val as = ActorSystem()
   implicit val ec = as.dispatcher
@@ -81,16 +98,16 @@ object WordCount {
   implicit val mat = FlowMaterializer(settings)
   println(s"settings: $settings")
 
-  //todo: mergeable datastructure
   def merge(a: Map[String, Int], b: Map[String, Int]): Map[String, Int] =
-    a.foldLeft(b) { case (wc, (s, c)) => wc.updated(s, c + wc.getOrElse(s, 0))}
+    b.foldLeft(a) { case (wc, (s, c)) => wc.updated(s, c + wc.getOrElse(s, 0))}
+
+  val store = new Store(Map.empty[String, Int])(merge)
+
+  val commentcountStore = new Store(0L)(_ + _)
 
   val subreddits = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news", "tifu")
 
   def main(args: Array[String]): Unit = {
-    // agent, accepts sequence of functions T => T, runs them in sequence.
-    // todo: abstract this out into a mockDB class w/ all interactions via Future to make example more concrete
-    val out = Agent(Map.empty[String, Int])
 
     val f: Future[Unit] =
       Flow(subreddits) // start with a flow of subreddit names
@@ -99,20 +116,36 @@ object WordCount {
       .mapFuture(RedditAPI.comments) // for each link, get a Future[CommentListing] and fold the result into the stream
       .mapConcat(_.comments) // concat a Flow of comment listings into a flow of comments
       .map(_.words) // get a wordcount for each
-      .foreach{ wordcount => // fold each wordcount into the result-holder agent
-        // since we're just performing addition for each of N keys order is irrelevant, which is a nice bonus
-        // I'm using an agent here to keep this example in-memory.
-      out.send(merge(wordcount, _))
-     }
+      .groupedWithin(200, 1 second) // group wordcounts to avoid excessive DB IO
+      .mapFuture( xs => commentcountStore.update(xs.length).map(_ => xs ))
+      .map(_.reduce(merge)) // merge wordcount lists
+      .mapFuture(store.update) // send
+      .fold(())( (_,_) => () ).toFuture // fold into nothing and grab the future
 
-    timedFuture("main stream")(f).onComplete{
-      case Success(_) =>
-        //grab and log final agent state
-        val res = out.get()
-        println(s"${res.size} distinct words, ${res.values.sum} words total")
+    timedFuture("main stream")(f).
+      flatMap( _ => store.read.zip(commentcountStore.read) ).onComplete{
+      case Success((finalWordCount, cc)) =>
+
+        writeTsv(finalWordCount)
+
+        println(s"$cc comments")
+
+        println(s"${finalWordCount.size} distinct words, ${finalWordCount.values.sum} words total")
         as.shutdown()
       case _ =>
+
         as.shutdown()
     }
   }
+
+  def writeTsv(wordcount: Map[String, Int]) = {
+
+    val tsv = wordcount.toList.sortBy{ case (_, n) => n }.reverse.map{ case (s, n) => s"$s\t$n"}.mkString("\n")
+
+    import java.nio.file.{Paths, Files}
+    import java.nio.charset.StandardCharsets
+
+    Files.write(Paths.get("words.tsv"), tsv.getBytes(StandardCharsets.UTF_8))
+  }
+
 }
