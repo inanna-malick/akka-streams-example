@@ -39,7 +39,7 @@ case class Comment(body: String){
   def normalize(s: Seq[String]): Seq[String] =
     s.map(_.filter(alpha.contains).map(_.toLower)).filterNot(_.isEmpty)
 
-  def words: Map[String, Int] =
+  def toWordCount: Map[String, Int] =
     normalize(body.split(" ").to[Seq])
       .groupBy(identity)
       .mapValues(_.length)
@@ -47,7 +47,7 @@ case class Comment(body: String){
 
 object RedditAPI {
   def topLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing] = {
-    val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "25", "t" -> "all")
+    val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "100", "t" -> "all")
     val f = Http(page OK dispatch.as.json4s.Json).map(LinkListing.fromJson(subreddit)(_))
     timedFuture(s"links: r/$subreddit/top")(f)
   }
@@ -63,19 +63,28 @@ object RedditAPI {
 object Util {
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
-    println(s"--> send off $name")
+    println(s"--> started $name")
     f.andThen{
       case Success(_) =>
         val end = System.currentTimeMillis()
-        println(s"\t<-- completed $name, total time elapsed: ${end - start}")
+        println(s"\t<-- finished $name, total time elapsed: ${end - start}")
       case Failure(ex) =>
         val end = System.currentTimeMillis()
         println(s"\t<X> failed $name, total time elapsed: ${end - start}\n$ex")
     }
   }
+
+  def writeTsv(wordcount: Map[String, Int]) = {
+    import java.nio.file.{Paths, Files}
+    import java.nio.charset.StandardCharsets
+
+    val tsv = wordcount.toList.sortBy{ case (_, n) => n }.reverse.map{ case (s, n) => s"$s\t$n"}.mkString("\n")
+    Files.write(Paths.get("words.tsv"), tsv.getBytes(StandardCharsets.UTF_8))
+  }
 }
 
 // jury-rigged value store starting with `zero` and merging in new elements as provided
+// could use an implicit Monoid, but then I'd need to pull in scalaz?
 case class Store[T](zero: T)(f: (T, T) => T )(implicit val ec: ExecutionContext) {
   private val store: Agent[T] = Agent(zero)
 
@@ -99,53 +108,52 @@ object WordCount {
   println(s"settings: $settings")
 
   def merge(a: Map[String, Int], b: Map[String, Int]): Map[String, Int] =
-    b.foldLeft(a) { case (wc, (s, c)) => wc.updated(s, c + wc.getOrElse(s, 0))}
+    b.foldLeft(a) { case (wc, (s, c)) =>
+      wc.updated(s, c + wc.getOrElse(s, 0))
+    }
 
-  val store = new Store(Map.empty[String, Int])(merge)
-
-  val commentcountStore = new Store(0L)(_ + _)
+  // in-memory single-operation update-only data stores backed by Akka Agents
+  val wordcount: Store[Map[String, Int]] = new Store(Map.empty[String, Int])(merge)
+  val commentcount: Store[Long] = new Store(0L)(_ + _)
 
   val subreddits = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news", "tifu")
 
   def main(args: Array[String]): Unit = {
 
-    val f: Future[Unit] =
+    val links: Flow[Link] =
       Flow(subreddits) // start with a flow of subreddit names
-      .mapFuture(RedditAPI.topLinks) // for each subreddit name, get a Future[LinkListing] and fold the result into the stream
-      .mapConcat(_.links) // concat a Flow of listings of links into a Flow of links
-      .mapFuture(RedditAPI.comments) // for each link, get a Future[CommentListing] and fold the result into the stream
-      .mapConcat(_.comments) // concat a Flow of comment listings into a flow of comments
-      .map(_.words) // get a wordcount for each
-      .groupedWithin(200, 1 second) // group wordcounts to avoid excessive DB IO
-      .mapFuture( xs => commentcountStore.update(xs.length).map(_ => xs ))
-      .map(_.reduce(merge)) // merge wordcount lists
-      .mapFuture(store.update) // send
-      .fold(())( (_,_) => () ).toFuture // fold into nothing and grab the future
+        // for each subreddit name, get a Future[LinkListing] and fold the result into the stream
+      .mapFuture( subreddit => RedditAPI.topLinks(subreddit) )
+      .mapConcat( listing => listing.links) // concat a Flow of listings of links into a Flow of links
 
-    timedFuture("main stream")(f).
-      flatMap( _ => store.read.zip(commentcountStore.read) ).onComplete{
-      case Success((finalWordCount, cc)) =>
+    // for each link, get a Future[CommentListing] and fold the result into the stream
+    val comments: Flow[Comment] = links
+      .mapFuture( link => RedditAPI.comments(link) )
+      .mapConcat( listing => listing.comments) // concat a Flow of comment listings into a flow of comments
 
-        writeTsv(finalWordCount)
 
-        println(s"$cc comments")
+    val f: Future[Unit] = comments
+      .groupedWithin(1000, 1 second) // group comments to avoid excessive IO
+      //for each group, send an update off to the data stores and fold the resulting future(s) into the stream
+      .mapFuture{ xs =>
+        val updateCommentCount = commentcount.update(xs.length)
+        val updateWordCount = wordcount.update(xs.map(_.toWordCount).reduce(merge))
+        updateCommentCount zip updateWordCount
+      }.foreach{ _ =>  } // use foreach here because it returns a future which completes when the stream is done.
 
-        println(s"${finalWordCount.size} distinct words, ${finalWordCount.values.sum} words total")
-        as.shutdown()
-      case _ =>
+    timedFuture("main stream")(f)
+      .flatMap( _ => wordcount.read.zip(commentcount.read) ) // grab final word and comment count
+      .onComplete{
+        case Success((finalWordCount, cc)) =>
+          writeTsv(finalWordCount)
 
-        as.shutdown()
-    }
-  }
+          println(s"$cc comments")
+          println(s"${finalWordCount.size} distinct words, ${finalWordCount.values.sum} words total")
+          as.shutdown()
+        case _ =>
 
-  def writeTsv(wordcount: Map[String, Int]) = {
-
-    val tsv = wordcount.toList.sortBy{ case (_, n) => n }.reverse.map{ case (s, n) => s"$s\t$n"}.mkString("\n")
-
-    import java.nio.file.{Paths, Files}
-    import java.nio.charset.StandardCharsets
-
-    Files.write(Paths.get("words.tsv"), tsv.getBytes(StandardCharsets.UTF_8))
+          as.shutdown()
+      }
   }
 
 }
