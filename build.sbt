@@ -1,4 +1,4 @@
-name := "twitter4j-tutorial"
+name := "akka-reddit-wordcount"
  
 version := "0.1.0 "
  
