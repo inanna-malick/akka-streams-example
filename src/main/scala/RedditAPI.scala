@@ -18,7 +18,7 @@ object RedditAPI {
 
   def comments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing] = {
     val page = url(s"http://www.reddit.com/r/${link.subreddit}/comments/${link.id}.json") <<? Map("depth" -> "25", "limit" -> "2000")
-    val f = Http(page OK dispatch.as.json4s.Json).map(CommentListing.fromJson)
+    val f = Http(page OK dispatch.as.json4s.Json).map(json => CommentListing.fromJson(json, link.subreddit))
     timedFuture(s"comments: r/${link.subreddit}/${link.id}/comments")(f)
   }
 }
@@ -34,15 +34,15 @@ case class LinkListing(links: Seq[Link])
 case class Link(id: String, subreddit: String)
 
 object CommentListing {
-  def fromJson(json: JValue) = {
+  def fromJson(json: JValue, subreddit: String) = {
     val x = json.\("data")
       .filterField{case ("body", _) => true; case _ => false }
-      .collect{ case ("body", JString(s)) => Comment(s)}
-    CommentListing(x)
+      .collect{ case ("body", JString(s)) => Comment(subreddit, s)}
+    CommentListing(subreddit, x)
   }
 }
-case class CommentListing(comments: Seq[Comment])
-case class Comment(body: String){
+case class CommentListing(subreddit: String, comments: Seq[Comment])
+case class Comment(subreddit: String, body: String){
   val alpha = (('a' to 'z') ++ ('A' to 'Z')).toSet
 
   def normalize(s: Seq[String]): Seq[String] =

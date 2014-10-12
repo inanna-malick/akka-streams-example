@@ -18,5 +18,6 @@ libraryDependencies ++= Seq(
   "net.databinder.dispatch" %% "dispatch-json4s-native" % "0.11.2",
   "com.google.protobuf" % "protobuf-java" % "2.5.0",
   //"com.fasterxml.jackson.core" % "jackson-databind" % "2.4.2",
-  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.4.2"
+  "com.fasterxml.jackson.module" %% "jackson-module-scala" % "2.4.2",
+  "org.scalaz" %% "scalaz-core" % "7.1.0"  
 )
