@@ -9,6 +9,7 @@ import scalaz._
 import Scalaz._
 import Util._
 
+
 object Util {
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
@@ -23,7 +24,16 @@ object Util {
     }
   }
 
-  def writeTsv(fname: String, wordcount: Map[String, Int]) = {
+  def withRetry[T](f: => Future[T], onFail: T, n: Int = 3)(implicit ec: ExecutionContext): Future[T] = 
+    if (n > 0){ f.recoverWith{ case err: Exception => 
+      println(s"future failed with $err, retrying")
+      withRetry(f, onFail, n - 1)
+    }} else{
+      println(s"WARNING: failed to run future, substituting $onFail")
+      Future.successful(onFail)
+    }
+
+  def writeTsv(fname: String, wordcount: WordCount) = {
     import java.nio.file.{Paths, Files}
     import java.nio.charset.StandardCharsets
 
@@ -46,9 +56,7 @@ class KVStore(implicit val ec: ExecutionContext) {
   def wordCounts: Future[Map[Subreddit, WordCount]] = commentCount.read
 }
 
-
-// jury-rigged value store starting with `zero` and merging in new elements as provided
-// could use an implicit Monoid, but then I'd need to pull in scalaz which is excessive
+// jury-rigged value store
 class Store[T](implicit val m: Monoid[T], implicit val ec: ExecutionContext) {
   private val store: Agent[T] = Agent(m.zero)
   
