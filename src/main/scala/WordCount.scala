@@ -24,18 +24,20 @@ object WordCount {
   val settings = MaterializerSettings()//.withFanOut(16, 32).withBuffer(16, 32)
   implicit val mat = FlowMaterializer(settings)
 
-
   val defaultSubreddits: Vector[Subreddit] = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news")
 
   val store = new KVStore
 
   def merge(a: WordCount, b: WordCount): WordCount = a |+| b
 
+  /** transforms a stream of subreddits into a stream of the top comments
+   *  posted in each of the top threads in that subreddit
+   */
   val fetchComments: Duct[Subreddit, Comment] = 
     Duct[Subreddit]
-        .mapFuture( subreddit => RedditAPI.topLinks(subreddit) )
+        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) )
         .mapConcat( listing => listing.links )
-        .mapFuture( link => RedditAPI.comments(link) )
+        .mapFuture( link => RedditAPI.popularComments(link) )
         .mapConcat( listing => listing.comments )
 
   val persistBatch: Duct[Comment, Int] = 
@@ -50,12 +52,12 @@ object WordCount {
         }
 
   def main(args: Array[String]): Unit = {
-    val subreddits: Vector[String] = 
-      if (args.isEmpty) defaultSubreddits
-      else args.toVector
+    val subreddits: Flow[String] = 
+      if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity)
+      else Flow(args.toVector)
 
     val streamF: Future[Unit] = 
-      Flow(subreddits)
+      subreddits
         .append(fetchComments)
         .append(persistBatch)
         .foreach{ n => println(s"persisted $n comments")}
@@ -64,15 +66,12 @@ object WordCount {
       .flatMap( _ => store.wordCounts)
       .onComplete{
         case Success(wordcounts) =>
-          for {
-            files <- Option(new File("res").listFiles)
-            file <- files if file.getName.endsWith(".tsv")
-          } file.delete()
-
+          clearOutputDir()
           wordcounts.foreach{ case (subreddit, wordcount) =>
             val fname = s"res/$subreddit.tsv"
             println(s"write wordcount for $subreddit to $fname")
             writeTsv(fname, wordcount)
+            println(s"${wordcount.size} discrete words and ${wordcount.values.sum} total words for $subreddit")
           }
           as.shutdown()
         case Failure(err) =>
@@ -80,4 +79,11 @@ object WordCount {
           as.shutdown()
       }
   }
+
+  def clearOutputDir() = 
+    for {
+      files <- Option(new File("res").listFiles)
+      file <- files if file.getName.endsWith(".tsv")
+    } file.delete()
+
 }
