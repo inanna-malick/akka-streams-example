@@ -21,22 +21,31 @@ import java.io.File
 object WordCount {
   implicit val as = ActorSystem()
   implicit val ec = as.dispatcher
-  val settings = MaterializerSettings()//.withFanOut(16, 32).withBuffer(16, 32)
+  val settings = MaterializerSettings()
   implicit val mat = FlowMaterializer(settings)
 
   val defaultSubreddits: Vector[Subreddit] = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news")
 
   val store = new KVStore
 
+  //we're grabbing static-ish pages
+  val redditAPIRate = 250 millis
+
+  case object Tick
+  val throttle = Flow(redditAPIRate, redditAPIRate, () => Tick)
+  
+  def throttled[T](f: Flow[T]): Flow[T] = f
   def merge(a: WordCount, b: WordCount): WordCount = a |+| b
 
   /** transforms a stream of subreddits into a stream of the top comments
    *  posted in each of the top threads in that subreddit
    */
-  val fetchComments: Duct[Subreddit, Comment] = 
+  def fetchComments: Duct[Subreddit, Comment] = 
     Duct[Subreddit]
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
         .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) )
         .mapConcat( listing => listing.links )
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t }
         .mapFuture( link => RedditAPI.popularComments(link) )
         .mapConcat( listing => listing.comments )
 

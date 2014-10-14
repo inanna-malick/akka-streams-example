@@ -15,9 +15,9 @@ object Util {
     val start = System.currentTimeMillis()
     println(s"--> started $name")
     f.andThen{
-      case Success(_) =>
+      case Success(t) =>
         val end = System.currentTimeMillis()
-        println(s"\t<-- finished $name, total time elapsed: ${end - start}")
+        println(s"\t<-- finished $name after ${end - start}")
       case Failure(ex) =>
         val end = System.currentTimeMillis()
         println(s"\t<X> failed $name, total time elapsed: ${end - start}\n$ex")
