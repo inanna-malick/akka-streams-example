@@ -14,7 +14,7 @@ object RedditAPI {
 
   def popularLinks(subreddit: Subreddit)(implicit ec: ExecutionContext): Future[LinkListing] = 
     withRetry(timedFuture(s"links: r/$subreddit/top"){
-      val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "50", "t" -> "all") <:< useragent
+      val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "100", "t" -> "all") <:< useragent
       Http(page OK dispatch.as.json4s.Json).map(LinkListing.fromJson(subreddit)(_))
     }, LinkListing(Seq.empty))
 
