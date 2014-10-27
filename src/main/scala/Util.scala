@@ -8,6 +8,9 @@ import akka.agent.Agent
 import scalaz._
 import Scalaz._
 import Util._
+import java.io.File
+import java.nio.file.{Paths, Files}
+import java.nio.charset.StandardCharsets
 
 
 object Util {
@@ -34,12 +37,15 @@ object Util {
     }
 
   def writeTsv(fname: String, wordcount: WordCount) = {
-    import java.nio.file.{Paths, Files}
-    import java.nio.charset.StandardCharsets
-
     val tsv = wordcount.toList.sortBy{ case (_, n) => n }.reverse.map{ case (s, n) => s"$s\t$n"}.mkString("\n")
     Files.write(Paths.get(fname), tsv.getBytes(StandardCharsets.UTF_8))
   }
+
+  def clearOutputDir() = 
+    for {
+      files <- Option(new File("res").listFiles)
+      file <- files if file.getName.endsWith(".tsv")
+    } file.delete()
 
   type WordCount = Map[String, Int]
   type Subreddit = String  
