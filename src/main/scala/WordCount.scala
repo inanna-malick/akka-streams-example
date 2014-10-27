@@ -15,7 +15,6 @@ import scala.util.{Failure, Success}
 import scalaz._
 import Scalaz._
 
-import java.io.File
 
 // todo: per/reddit store, per-reddit output TSV.
 object WordCount {
@@ -28,13 +27,12 @@ object WordCount {
 
   val store = new KVStore
 
-  //we're grabbing static-ish pages
+
   val redditAPIRate = 250 millis
 
   case object Tick
   val throttle = Flow(redditAPIRate, redditAPIRate, () => Tick)
   
-  def throttled[T](f: Flow[T]): Flow[T] = f
   def merge(a: WordCount, b: WordCount): WordCount = a |+| b
 
   /** transforms a stream of subreddits into a stream of the top comments
@@ -88,11 +86,4 @@ object WordCount {
           as.shutdown()
       }
   }
-
-  def clearOutputDir() = 
-    for {
-      files <- Option(new File("res").listFiles)
-      file <- files if file.getName.endsWith(".tsv")
-    } file.delete()
-
 }
