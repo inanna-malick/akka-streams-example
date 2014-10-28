@@ -56,7 +56,6 @@ object Simple {
       .flatMap( links =>  Future.sequence(links.map(popularComments))
       .map( commentListings => commentListings.flatMap(_.comments) )
 
-
   def run(){
     val linksF = fetchPopularLinks()
     val commentsF = fetchPopularComments(linksF)
