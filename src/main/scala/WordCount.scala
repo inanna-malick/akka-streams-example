@@ -20,7 +20,7 @@ import Scalaz._
 object WordCount {
   implicit val as = ActorSystem()
   implicit val ec = as.dispatcher
-  val settings = MaterializerSettings()
+  val settings = MaterializerSettings(as)
   implicit val mat = FlowMaterializer(settings)
 
   val defaultSubreddits: Vector[Subreddit] = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news")
@@ -39,8 +39,8 @@ object WordCount {
    *  posted in each of the top threads in that subreddit
    */
   def fetchComments: Duct[Subreddit, Comment] = 
-    Duct[Subreddit]
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
+    Duct[Subreddit] // create a Duct[Subreddit, Subreddit]
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t }
         .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) )
         .mapConcat( listing => listing.links )
         .zip(throttle.toPublisher).map{ case (t, Tick) => t }

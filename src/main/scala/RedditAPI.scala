@@ -10,23 +10,29 @@ import scala.collection.immutable._
 import Util._
 
 object RedditAPI {
+
+  val linksToFetch = 50
+  val subredditsToFetch = 50
+  val commentsToFetch = 2000
+  val commentDepth = 25
+
   val useragent = Map("User-Agent" -> "wordcloud mcgee")
 
   def popularLinks(subreddit: Subreddit)(implicit ec: ExecutionContext): Future[LinkListing] = 
     withRetry(timedFuture(s"links: r/$subreddit/top"){
-      val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> "100", "t" -> "all") <:< useragent
+      val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> linksToFetch.toString, "t" -> "all") <:< useragent
       Http(page OK dispatch.as.json4s.Json).map(LinkListing.fromJson(subreddit)(_))
     }, LinkListing(Seq.empty))
 
   def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing] = 
     withRetry(timedFuture(s"comments: r/${link.subreddit}/${link.id}/comments"){
-      val page = url(s"http://www.reddit.com/r/${link.subreddit}/comments/${link.id}.json") <<? Map("depth" -> "25", "limit" -> "2000") <:< useragent
+      val page = url(s"http://www.reddit.com/r/${link.subreddit}/comments/${link.id}.json") <<? Map("depth" -> commentDepth.toString, "limit" -> commentsToFetch.toString) <:< useragent
       Http(page OK dispatch.as.json4s.Json).map(json => CommentListing.fromJson(json, link.subreddit))
     }, CommentListing(link.subreddit, Seq.empty))
 
   def popularSubreddits(implicit ec: ExecutionContext): Future[Seq[Subreddit]] = 
     timedFuture("fetch popular subreddits"){
-      val page = url(s"http://www.reddit.com/subreddits/popular.json").GET <<? Map("limit" -> "50") <:< useragent
+      val page = url(s"http://www.reddit.com/subreddits/popular.json").GET <<? Map("limit" -> subredditsToFetch.toString) <:< useragent
       Http(page OK dispatch.as.json4s.Json).map{ json =>
         json.\("data").\("children").children
           .map(_.\("data").\("url"))
@@ -34,6 +40,28 @@ object RedditAPI {
           .map{ x => println(x); x}
       }
     }
+}
+
+object Simple {
+  import RedditAPI._
+  import ExecutionContext.Implicits.global
+
+  def fetchPopularLinks(): Future[Seq[Link]] = 
+    popularSubreddits
+      .flatMap( subreddits => Future.sequence(subreddits.map(popularLinks)) )
+      .map( linkListings => linkListings.flatMap(_.links) )
+
+  def fetchPopularComments(linksF: Future[Seq[Link]]): Future[Seq[Comment]] = 
+    linksF
+      .flatMap( links =>  Future.sequence(links.map(popularComments))
+      .map( commentListings => commentListings.flatMap(_.comments) )
+
+
+  def run(){
+    val linksF = fetchPopularLinks()
+    val commentsF = fetchPopularComments(linksF)
+    commentsF.onSuccess{ case comments: Seq[Comment] => println(s"fetched ${comments.length} comments") }
+  }
 }
 
 
