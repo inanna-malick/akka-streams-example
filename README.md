@@ -28,7 +28,7 @@ def wordCounts: Future[Map[Subreddit, WordCount]]
 Naive Solution:
 --------------
 
-future based solution: use flatMap and Future.sequence to build a Future[Seq[Comment]] (link to code, don't go into depth)
+future based solution: use flatMap and Future.sequence to build a ```Future[Seq[Comment]]``` (link to code, no in-depth explanation as w/ streams impl)
     - gets a subreddit list, immediately issues requests for each subreddit. When that's done, gets a link listing, immediately issues requests for comments for each link.
     - bursty. That's the key point, and our motivation.
 
@@ -46,7 +46,7 @@ To accomplish this we're going to use akka's new stream library.
 First, we will create some Ducts, each a description of stream transformations from an In type to an Out type. (I say description because a Duct is not instantiated until it is materialized. (link to info)). We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. Having created these high-level descriptions of computations to be performed, we can then append them to a Flow[Subreddit] (created using the result of the popularSubreddits api call or the list of subreddits provided as command line arguments if present)
 
 
-1. First, we need to transform a flow of subreddit names into a flow of the top comments in the top threads of each subreddit. We also want to limit our calls to 4 per second, or one every 250 milliseconds. Here's how: (I'll break it down later)
+1. ```Duct[Subreddit, Comment]```: transform a flow of subreddit names into a flow of the top comments in the top threads of each subreddit. We also want to limit our calls to 4 per second, or one every 250 milliseconds. 
 
     ```scala
     val redditAPIRate = 250 millis
@@ -66,16 +66,15 @@ First, we will create some Ducts, each a description of stream transformations f
             .mapFuture( link => RedditAPI.popularComments(link) )
             .mapConcat( listing => listing.comments )
     ```
-        1. Duct.apply
-        2. zip (w/ throttle)
-        3. mapFuture
-        4. mapConcat
-        5. zip (w/ throttle)
-        6. mapFuture
-        7. mapConcat
+    1. Duct.apply
+    2. zip (w/ throttle)
+    3. mapFuture
+    4. mapConcat
+    5. zip (w/ throttle)
+    6. mapFuture
+    7. mapConcat
 
-7. Duct[Comment, Int]
-
+7. ```Duct[Comment, Int]```: persist comments and output the size of each batch of comments persisted
 
     ```scala
     val persistBatch: Duct[Comment, Int] = 
@@ -89,8 +88,8 @@ First, we will create some Ducts, each a description of stream transformations f
                 Future.sequence(fs).map{ _ => batch.size }
             }
     ```
-        1. groupedWithin
-        2. mapFuture
+    1. groupedWithin
+    2. mapFuture
 
 3. final append: no processing has occured, no api calls made. We've just described what we want to do. Now make it so.
 
