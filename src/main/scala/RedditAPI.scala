@@ -53,7 +53,7 @@ object Simple {
 
   def fetchPopularComments(linksF: Future[Seq[Link]]): Future[Seq[Comment]] = 
     linksF
-      .flatMap( links =>  Future.sequence(links.map(popularComments))
+      .flatMap( links =>  Future.sequence(links.map(popularComments)))
       .map( commentListings => commentListings.flatMap(_.comments) )
 
   def run(){
