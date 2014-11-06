@@ -54,14 +54,17 @@ object WordCount {
    * It outputs the size of each batch persisted
    */
   val persistBatch: Duct[Comment, Int] = 
-    Duct[Comment]  // first, create a duct that doesn't apply any transformations
-        .groupedWithin(2000, 5 second) // group comments to avoid excessive IO. Emits Seq[Comment]'s every 2000 elements or 5 seconds, whichever comes first
+    // 0) create a duct that applies no transformations
+    Duct[Comment]
+        // 1) group comments, emitting a batch every 5000 elements or every 5 seconds, whichever comes first
+        .groupedWithin(5000, 5 second) 
+        // 2) group comments by subreddit and write wordcount for each group to the store
         .mapFuture{ batch => 
           val grouped: Map[Subreddit, WordCount] = batch
-            .groupBy(_.subreddit) // group each batch of comments by subreddit
-            .mapValues(_.map(_.toWordCount).reduce(merge)) // convert each group of comments into word counts and merge them into a single word count
-          val fs = grouped.map{ case (subreddit, wordcount) => store.addWords(subreddit, wordcount) } // write each (subreddit, wordcount) pair to the store
-          Future.sequence(fs).map{ _ => batch.size } // create a future that will complete when all store operations complete, holding the size of this batch
+            .groupBy(_.subreddit)
+            .mapValues(_.map(_.toWordCount).reduce(merge))
+          val fs = grouped.map{ case (subreddit, wordcount) => store.addWords(subreddit, wordcount) }
+          Future.sequence(fs).map{ _ => batch.size }
         }
 
   def main(args: Array[String]): Unit = {
