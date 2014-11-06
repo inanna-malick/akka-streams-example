@@ -69,7 +69,7 @@ We're going to do this using akka's new stream library. Let's start by describin
 
 We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will issue API calls to get links for each subreddit, comments for each link, etc.
 
-    ```scala
+```scala
   def fetchComments: Duct[Subreddit, Comment] = 
     Duct[Subreddit] // first, create a duct that doesn't apply any transformations
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives subreddit names
@@ -78,8 +78,7 @@ We're going to need a Duct[Subreddit, Comment] to turn our starting stream of su
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives links
         .mapFuture( link => RedditAPI.popularComments(link) ) // fetch links. Subject to rate limiting
         .mapConcat( listing => listing.comments ) // flatten a stream of comment listings into a stream of comments
-
-    ```(link to line # and file)
+```(link to line # and file)
 
 
   We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
