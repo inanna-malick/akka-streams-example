@@ -50,27 +50,34 @@ object WordCount {
   val persistBatch: Duct[Comment, Int] = 
     // 0) Create a duct that applies no transformations.
     Duct[Comment]
-        // 1) Group comments, emitting a batch every 5000 elements or every 5 seconds, whichever comes first.
+        // 1) Group comments, emitting a batch every 5000 elements
+        //    or every 5 seconds, whichever comes first.
         .groupedWithin(5000, 5 second) 
-        // 2) Group comments by subreddit and write wordcount for each group to the store.
-        //    Outputs the size of each batch after it is persisted.
+        // 2) Group comments by subreddit and write the wordcount 
+        //    for each group to the store. This step outputs 
+        //    the size of each batch after it is persisted.
         .mapFuture{ batch => 
           val grouped: Map[Subreddit, WordCount] = batch
             .groupBy(_.subreddit)
             .mapValues(_.map(_.toWordCount).reduce(merge))
-          val fs = grouped.map{ case (subreddit, wordcount) => store.addWords(subreddit, wordcount) }
+          val fs = grouped.map{ case (subreddit, wordcount) => 
+              store.addWords(subreddit, wordcount)
+            }
           Future.sequence(fs).map{ _ => batch.size }
         }
 
   def main(args: Array[String]): Unit = {
-    // 0) Create a Flow of Subreddit names from cmd line input or the results of an API call.
+    // 0) Create a Flow of Subreddit names, using either
+    //    the argument vector or the result of an API call.
     val subreddits: Flow[Subreddit] =
-      if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity)
-      else Flow(args.toVector)
+      if (args.isEmpty) 
+        Flow(RedditAPI.popularSubreddits).mapConcat(identity)
+      else
+        Flow(args.toVector)
 
-    // 1) Append ducts to the initial flow and materialize it using forEach. 
-    //    The resulting future will succeed if stream processing completes 
-    //    or fail if an error occurs.
+    // 1) Append ducts to the initial flow and materialize it via forEach. 
+    //    The resulting future succeeds if stream processing completes 
+    //    or fails if an error occurs.
     val streamF: Future[Unit] = 
       subreddits
         .append(fetchComments)
