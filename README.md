@@ -57,15 +57,27 @@ def run(){
 This example fetches a list of subreddit names, then issues a batch of requests for the top links in each subreddit. After fetching the links, it issues requests for the top comments on each link. This pattern of issuing bursts of requests works fine at first, then starts failing with 503: service unavailable errors as Reddit's rate limiting kicks in. Try it for yourself: open up a console and type 'main.Simple.run()' (you'll want to kill the process after calls start failing with 503 errors)
 
 
-Streams
--------
+Streams 101
+-----------
+Reactive Stream Primitives: link to reactive streams website
+- subscribers
+- producers
+- there are a few more interfaces, here's the spec: https://github.com/reactive-streams/reactive-streams/blob/v0.3/tck/src/main/resources/spec.md
+- these are live streams, materialized streams, that can process elements and exert backpressure.
 
-What we want is to issue requests at some regular interval. This will stop us from getting blocked for berzerking their servers with thousands of requests in a short amount of time.
+ScalaDSL
+- these are stream descriptors, that can be materialized into streams composed of reactive stream primitives. This is an important distinction.
+- Flows: stream descriptions with an open input. Can be attached to a subscriber and materialized, or consumed directly with foreach.
+- Ducts: Flows, but with hanging input and output. Can be attached to a producer and subscriber, or appended to a flow
+- Duct is a free-floating transformation pipeline to which a subscriber and producer can be attached. They can be appended to eachother, or to flows, which describe producers of values
 
-We're going to do this using akka's new stream library. First, we will build our transformation pipeline using Ducts.
-Explain concept of ducts in brief, link to scaladoc.
+Less Naive Solution
+-------------------
 
-We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will issue API calls to get links for each subreddit, comments for each link, etc.
+What we want is to issue requests at some regular interval. This will stop us from getting blocked for berzerking their servers with thousands of requests in a short amount of time. We're going to do this using akka's new stream library. First, we will build our transformation pipeline using Ducts. For now, assume we have some source of Subreddit names.
+    
+
+First we need a Duct[Subreddit, Comment] to turn the stream of subreddits produced by that source into a stream of comments from different subreddits. 
 
 ```scala
 def fetchComments: Duct[Subreddit, Comment] = 
@@ -86,7 +98,7 @@ def fetchComments: Duct[Subreddit, Comment] =
 ```
 
 
-We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
+We're also going to need to calculate wordcounts and write them to some store, ideally saving up comments to avoid an IO operation per comment. 
 
 ```scala
 val persistBatch: Duct[Comment, Int] = 
@@ -109,14 +121,8 @@ val persistBatch: Duct[Comment, Int] =
       }
 ```
 
-note that the above are vals, not defs. They can be reused, and no processing occurs until they are materialized. Cool, no? 
-    - except for the throttle.toPublisher calls :(. nvm.
-
-final append: no processing has occured, no api calls made. We've just described what we want to do. Now make it so.
-Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] and materialize.
-- explain what is a flow. sim detail to duct.
-- explain materializing stream. link to reactivestream sub/pub interface, mention that it's built on top of actors
-
+//todo: use the word composable
+final append: no processing has occured, no calls made to reddit. We've just described what we want to do. Now we make it so.
 
 ```scala
   def main(args: Array[String]): Unit = {
@@ -146,6 +152,7 @@ Having created these high-level descriptions of computations to be performed, we
 Closing: 
 --------
 
-1. scaladsl2. Has flow graphs for complex topos, new combinators like mapAsync (mapFuture w/o order, could keep occasional long-running calls from holding up the stream)
-    - rewritten in branch, but no zip combinator yet
-2. thanks akka dudes, vKlang for talk and dataxu for hosting, obligatory thanks to Aquto for being forward looking
+1. New DSL: scaladsl2. 
+    - main feature is flow graphs for complex topos, http://akka.io/news/2014/09/12/akka-streams-0.7-released.html
+    - new combinators like mapAsyncUnordered, equiv to mapFuture w/o order preservation, avoid halting stream processing to wait for the occasional long-running call to finish
+2. Thanks to the Akka team and everyone at Typesafe for great open source software, vKlang specifically for coming to the US to give a talk and DataXu for hosting it, and of course thanks to my employer Aquto for letting me work with cool new technology.
