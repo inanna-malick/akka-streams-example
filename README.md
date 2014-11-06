@@ -67,22 +67,19 @@ What we want is to issue requests at configurable intervals. This will stop us f
 
 We're going to do this using akka's new stream library. Let's start by describing the transformations our stream will need to perform. We'll do this using Duct's, <dscrpt/link>
 
-We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will need to issue API calls to get links for each subreddit, comments for each link, etc.
+We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will issue API calls to get links for each subreddit, comments for each link, etc.
 
     ```scala
-    ```
-        2. zip (w/ throttle): `Duct[Subreddit, Subreddit]
-            then zip it with throttle, a flow which produces a stream of `Tick` objects at regular intervals, and throw away the `Tick` objects. Since the zip step only emits elements when both streams have an element present, this produces a throttled stream that emits Subreddit names every 250 millis at most.
-        3. mapFuture: `Duct[Subreddit, LinkListing]`
-            apply a function producing a future to each incoming element, emitting the results of the future on completion. Preserves ordering.
-        4. mapConcat: `Duct[Subreddit, Link]`
-            apply a function to each element producing a seq, and emit each element of the seq into the stream
-        5. zip (w/ throttle) `Duct[Subreddit, Link]`
-            throttle the stream again. This is needed because we're going to be getting links in batches, and we don't want to issue requests for all of them at once.
-        6. mapFuture `Duct[Subreddit, CommentListing]`
-            use mapFuture again, to fetch the top comments for each `Link`
-        7. mapConcat `Duct[Subreddit, Comment]`
-            flatten out the stream
+  def fetchComments: Duct[Subreddit, Comment] = 
+    Duct[Subreddit] // first, create a duct that doesn't apply any transformations
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives subreddit names
+        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) // fetch links. Subject to rate limiting
+        .mapConcat( listing => listing.links ) // flatten a stream of link listings into a stream of links
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives links
+        .mapFuture( link => RedditAPI.popularComments(link) ) // fetch links. Subject to rate limiting
+        .mapConcat( listing => listing.comments ) // flatten a stream of comment listings into a stream of comments
+
+    ```(link to line # and file)
 
 
   We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 

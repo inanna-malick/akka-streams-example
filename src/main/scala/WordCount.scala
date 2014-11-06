@@ -31,8 +31,7 @@ object WordCount {
   
   def merge(a: WordCount, b: WordCount): WordCount = a |+| b
 
-  /** this Duct takes a stream of subreddit names and transforms it into
-   *  a stream of the top comments posted in each of the top threads in that subreddit
+  /** transform a stream of subreddit names into a stream of the top comments posted on the top links in that subreddit
    */
   def fetchComments: Duct[Subreddit, Comment] = 
     Duct[Subreddit] // first, create a duct that doesn't apply any transformations
