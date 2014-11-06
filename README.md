@@ -135,8 +135,9 @@ Having created these high-level descriptions of computations to be performed, we
         .append(persistBatch)
         .foreach{ n => println(s"persisted $n comments")}
 
-    // 2) When stream processing is finished, load the resulting wordcounts from the store, 
-    //    log some basic statisitics, and write them to a .tsv files (omited for brevity)
+    // 2) When stream processing is finished, load the resulting 
+    //    wordcounts from the store, log some basic statisitics, 
+    //    and write them to a .tsv files (code omited for brevity)
   }
 ```
     
