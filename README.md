@@ -35,23 +35,23 @@ Naive Solution:
 Since our API functions yield futures, the simplest possible solution is to use flatMap and Future.sequence to chain together functions.
 
 ```scala
-  def fetchPopularLinks(): Future[Seq[Link]] = 
-    popularSubreddits
-      .flatMap( subreddits => Future.sequence(subreddits.map(popularLinks)) )
-      .map( linkListings => linkListings.flatMap(_.links) )
+def fetchPopularLinks(): Future[Seq[Link]] = 
+  popularSubreddits
+    .flatMap( subreddits => Future.sequence(subreddits.map(popularLinks)) )
+    .map( linkListings => linkListings.flatMap(_.links) )
 
-  def fetchPopularComments(linksF: Future[Seq[Link]]): Future[Seq[Comment]] = 
-    linksF
-      .flatMap( links =>  Future.sequence(links.map(popularComments)))
-      .map( commentListings => commentListings.flatMap(_.comments) )
+def fetchPopularComments(linksF: Future[Seq[Link]]): Future[Seq[Comment]] = 
+  linksF
+    .flatMap( links =>  Future.sequence(links.map(popularComments)))
+    .map( commentListings => commentListings.flatMap(_.comments) )
 
-  def run(){
-    val linksF = fetchPopularLinks()
-    val commentsF = fetchPopularComments(linksF)
-    commentsF.onSuccess{ case comments: Seq[Comment] => 
-        println(s"fetched ${comments.length} comments")
-    }
+def run(){
+  val linksF = fetchPopularLinks()
+  val commentsF = fetchPopularComments(linksF)
+  commentsF.onSuccess{ case comments: Seq[Comment] => 
+    println(s"fetched ${comments.length} comments")
   }
+}
 ```
 
 This fetches a list of subreddit names, then immediately issues requests for the top links for each subreddit. After fetching the links, it issues requests for the top comments for each link. This pattern of issuing bursts of requests works fine at first, then starts failing with 503: service unavailable errors as rate limiting kicks in. Try it for yourself: open up a console and type 'main.Simple.run()' (you'll want to kill the process after seeing the expected stream of 503 errors)
@@ -68,44 +68,44 @@ Explain concept of ducts in brief, link to scaladoc.
 We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will issue API calls to get links for each subreddit, comments for each link, etc.
 
 ```scala
-  def fetchComments: Duct[Subreddit, Comment] = 
-    // 0) Create a duct that applies no transformations.
-    Duct[Subreddit] 
-        // 1) Throttle the rate at which the next step can receive subreddit names.
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
-        // 2) Fetch links. Subject to rate limiting.
-        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) 
-        // 3) Flatten a stream of link listings into a stream of links.
-        .mapConcat( listing => listing.links ) 
-        // 4) Throttle the rate at which the next step can receive links.
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
-        // 5) Fetch links. Subject to rate limiting.
-        .mapFuture( link => RedditAPI.popularComments(link) ) 
-        // 6) Flatten a stream of comment listings into a stream of comments.
-        .mapConcat( listing => listing.comments )
+def fetchComments: Duct[Subreddit, Comment] = 
+  // 0) Create a duct that applies no transformations.
+  Duct[Subreddit] 
+      // 1) Throttle the rate at which the next step can receive subreddit names.
+      .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
+      // 2) Fetch links. Subject to rate limiting.
+      .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) 
+      // 3) Flatten a stream of link listings into a stream of links.
+      .mapConcat( listing => listing.links ) 
+      // 4) Throttle the rate at which the next step can receive links.
+      .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
+      // 5) Fetch links. Subject to rate limiting.
+      .mapFuture( link => RedditAPI.popularComments(link) ) 
+      // 6) Flatten a stream of comment listings into a stream of comments.
+      .mapConcat( listing => listing.comments )
 ```
 
 
 We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
 ```scala
-  val persistBatch: Duct[Comment, Int] = 
-    // 0) Create a duct that applies no transformations.
-    Duct[Comment]
-        // 1) Group comments, emitting a batch every 5000 elements
-        //    or every 5 seconds, whichever comes first.
-        .groupedWithin(5000, 5 second) 
-        // 2) Group comments by subreddit and write the wordcount 
-        //    for each group to the store. This step outputs 
-        //    the size of each batch after it is persisted.
-        .mapFuture{ batch => 
-          val grouped: Map[Subreddit, WordCount] = batch
-            .groupBy(_.subreddit)
-            .mapValues(_.map(_.toWordCount).reduce(merge))
-          val fs = grouped.map{ case (subreddit, wordcount) => 
-              store.addWords(subreddit, wordcount)
-            }
-          Future.sequence(fs).map{ _ => batch.size }
-        }
+val persistBatch: Duct[Comment, Int] = 
+  // 0) Create a duct that applies no transformations.
+  Duct[Comment]
+      // 1) Group comments, emitting a batch every 5000 elements
+      //    or every 5 seconds, whichever comes first.
+      .groupedWithin(5000, 5 second) 
+      // 2) Group comments by subreddit and write the wordcount 
+      //    for each group to the store. This step outputs 
+      //    the size of each batch after it is persisted.
+      .mapFuture{ batch => 
+        val grouped: Map[Subreddit, WordCount] = batch
+          .groupBy(_.subreddit)
+          .mapValues(_.map(_.toWordCount).reduce(merge))
+        val fs = grouped.map{ case (subreddit, wordcount) => 
+            store.addWords(subreddit, wordcount)
+          }
+        Future.sequence(fs).map{ _ => batch.size }
+      }
 ```
 
 note that the above are vals, not defs. They can be reused, and no processing occurs until they are materialized. Cool, no?
