@@ -3,7 +3,8 @@ Scraping Reddit with Akka Streams 0.9
 
 Motivation
 ----------
-Reddit offers convenient APIs for accessing content. In this post, I'm going to walk you through using akka-streams to grab the top X comments for each of the top Y posts in each of the top Z subreddits. Since we'd like to be good internet citizens, (and not get our IP banned) we want to issue these api calls at consistient intervals, instead of short bursts. 
+Reddit offers convenient APIs for accessing content. In this post, I'm going to walk you through using akka-streams to grab the top X comments for each of the top Y posts in each of the top Z subreddits, persisting wordcounts for each subreddit, and writing the results to disk as TSV files. Since we'd like to be good internet citizens, (and not get our IP banned) we want to issue these api calls at consistient intervals, instead of short bursts. 
+
 API Sketch:
 -----------
 
@@ -62,14 +63,11 @@ This fetches a list of subreddit names, then immediately issues requests for the
 Streams
 -------
 
-What we want is to issue requests at configurable intervals. This will prevent the rate limiting that is a predictable result of berzerking their servers with thousands of requests in a short amount of time. (However you feel about reddit as a community, DDOS'ing them is still rude)
+What we want is to issue requests at configurable intervals. This will stop us from getting blocked for berzerking their servers with thousands of requests in a short amount of time. (However you feel about reddit as a community, DDOS'ing them is still rude)
 
-We're going to do this using akka's new stream library. 
+We're going to do this using akka's new stream library. Let's start by describing the transformations our stream will need to perform. We'll do this using Duct's, <dscrpt/link>
 
-First, we will create some Ducts, each a description of stream transformations from an In type to an Out type. (I say description because a Duct is not instantiated until it is materialized. (link to info)). We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] \(created using the result of the popular Subreddits api call or the list of subreddits provided as command line arguments if present\)
-
-
-1. First, we need to transform a flow of subreddit names into a flow of the top comments in the top threads of each subreddit. We also want to limit our calls to 4 per second, or one every 250 milliseconds. Here's how: (I'll break it down later)
+We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will need to issue API calls to get links for each subreddit, comments for each link, etc.
 
     ```scala
     val redditAPIRate = 250 millis
@@ -104,9 +102,8 @@ First, we will create some Ducts, each a description of stream transformations f
         7. mapConcat `Duct[Subreddit, Comment]`
             flatten out the stream
 
-7. Duct[Comment, Int]
 
-
+  We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
     ```scala
     val persistBatch: Duct[Comment, Int] = 
         Duct[Comment]
@@ -125,7 +122,9 @@ First, we will create some Ducts, each a description of stream transformations f
             Group each batch of comments by subreddit, convert them to word counts, merge them, and write them to the store.
             Use mapFuture to fold the result into the stream.
 
-3. final append: no processing has occured, no api calls made. We've just described what we want to do. Now make it so.
+final append: no processing has occured, no api calls made. We've just described what we want to do. Now make it so.
+Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] \(created using the result of the popular Subreddits api call or the list of subreddits provided as command line arguments if present\)
+
 
     ```scala
     val subreddits: Flow[String] = 

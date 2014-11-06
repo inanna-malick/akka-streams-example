@@ -35,40 +35,46 @@ object WordCount {
   
   def merge(a: WordCount, b: WordCount): WordCount = a |+| b
 
-  /** transforms a stream of subreddits into a stream of the top comments
-   *  posted in each of the top threads in that subreddit
+  /** this Duct takes a stream of subreddit names and transforms it into
+   *  a stream of the top comments posted in each of the top threads in that subreddit
    */
   def fetchComments: Duct[Subreddit, Comment] = 
     Duct[Subreddit] // create a Duct[Subreddit, Subreddit]
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t }
-        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) )
-        .mapConcat( listing => listing.links )
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t }
-        .mapFuture( link => RedditAPI.popularComments(link) )
-        .mapConcat( listing => listing.comments )
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the stream of subreddits
+        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) // for each subreddit, fetch popular links and emit the resulting link listing
+        .mapConcat( listing => listing.links ) // flatten the stream of link listings into a stream of links
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the stream of links
+        .mapFuture( link => RedditAPI.popularComments(link) ) // get popular comments for each subreddit and emit the resulting comment listing
+        .mapConcat( listing => listing.comments ) // flatten the stream of comment listings into a stream of comments
 
+  /** this Duct takes a stream of comments and, in batches of 2000 or every 5 seconds, 
+   * whichever comes first, writes them to the store. 
+   * It outputs the size of each batch persisted
+   */
   val persistBatch: Duct[Comment, Int] = 
     Duct[Comment]
-        .groupedWithin(1000, 5 second) // group comments to avoid excessive IO
+        .groupedWithin(2000, 5 second) // group comments to avoid excessive IO. Emits Seq[Comment]'s every 2000 elements or 5 seconds, whichever comes first
         .mapFuture{ batch => 
           val grouped: Map[Subreddit, WordCount] = batch
-            .groupBy(_.subreddit)
-            .mapValues(_.map(_.toWordCount).reduce(merge))
-          val fs = grouped.map{ case (subreddit, wordcount) => store.addWords(subreddit, wordcount) }
-          Future.sequence(fs).map{ _ => batch.size }
+            .groupBy(_.subreddit) // group each batch of comments by subreddit
+            .mapValues(_.map(_.toWordCount).reduce(merge)) // convert each group of comments into word counts and merge them into a single word count
+          val fs = grouped.map{ case (subreddit, wordcount) => store.addWords(subreddit, wordcount) } // write each (subreddit, wordcount) pair to the store
+          Future.sequence(fs).map{ _ => batch.size } // create a future that will complete when all store operations complete, holding the size of this batch
         }
 
   def main(args: Array[String]): Unit = {
-    val subreddits: Flow[String] = 
+    val subreddits: Flow[Subreddit] =  // create the initial Flow of Subreddits from either the cmd line input or reddit's popular subreddit api call
       if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity)
       else Flow(args.toVector)
 
+    // append ducts to the initial flow and materialize it using forEach
     val streamF: Future[Unit] = 
       subreddits
         .append(fetchComments)
         .append(persistBatch)
         .foreach{ n => println(s"persisted $n comments")}
 
+    // when the stream completes, write the contents of the store to per-subreddit .tsv files
     timedFuture("main stream")(streamF)
       .flatMap( _ => store.wordCounts)
       .onComplete{
