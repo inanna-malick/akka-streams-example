@@ -71,31 +71,32 @@ We're going to need a Duct[Subreddit, Comment] to turn our starting stream of su
 
 ```scala
   def fetchComments: Duct[Subreddit, Comment] = 
-    // 0) create a duct that applies no transformations
+    // 0) Create a duct that applies no transformations.
     Duct[Subreddit] 
-        // 1) throttle the rate at which the next step can receive subreddit names
+        // 1) Throttle the rate at which the next step can receive subreddit names.
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
-        // 2) fetch links. Subject to rate limiting
+        // 2) Fetch links. Subject to rate limiting.
         .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) 
-        // 3) flatten a stream of link listings into a stream of links
+        // 3) Flatten a stream of link listings into a stream of links.
         .mapConcat( listing => listing.links ) 
-        // 4) throttle the rate at which the next step can receive links
+        // 4) Throttle the rate at which the next step can receive links.
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
-        // 5) fetch links. Subject to rate limiting
+        // 5) Fetch links. Subject to rate limiting.
         .mapFuture( link => RedditAPI.popularComments(link) ) 
-        // 6) flatten a stream of comment listings into a stream of comments
-        .mapConcat( listing => listing.comments ) 
+        // 6) Flatten a stream of comment listings into a stream of comments.
+        .mapConcat( listing => listing.comments )
 ```
 
 
 We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
 ```scala
   val persistBatch: Duct[Comment, Int] = 
-    // 0) create a duct that applies no transformations
+    // 0) Create a duct that applies no transformations.
     Duct[Comment]
-        // 1) group comments, emitting a batch every 5000 elements or every 5 seconds, whichever comes first
+        // 1) Group comments, emitting a batch every 5000 elements or every 5 seconds, whichever comes first.
         .groupedWithin(5000, 5 second) 
-        // 2) group comments by subreddit and write wordcount for each group to the store
+        // 2) Group comments by subreddit and write wordcount for each group to the store.
+        //    Outputs the size of each batch after it is persisted.
         .mapFuture{ batch => 
           val grouped: Map[Subreddit, WordCount] = batch
             .groupBy(_.subreddit)
@@ -105,11 +106,47 @@ We're also going to use a Duct[Comment, Int] to persist batches of comments, out
         }
 ```
 
+note that the above are vals, not defs. They can be reused, and no processing occurs until they are materialized. Cool, no?
+
 final append: no processing has occured, no api calls made. We've just described what we want to do. Now make it so.
 Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] \(created using the result of the popular Subreddits api call or the list of subreddits provided as command line arguments if present\)
 
 
 ```scala
+  def main(args: Array[String]): Unit = {
+    // 0) Create a Flow of Subreddit names from cmd line input or the results of an API call.
+    val subreddits: Flow[Subreddit] =
+      if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity)
+      else Flow(args.toVector)
+
+    // 1) Append ducts to the initial flow and materialize it using forEach. 
+    //    The resulting future will succeed if stream processing completes 
+    //    or fail if an error occurs.
+    val streamF: Future[Unit] = 
+      subreddits
+        .append(fetchComments)
+        .append(persistBatch)
+        .foreach{ n => println(s"persisted $n comments")}
+
+    // 2) When stream processing is finished, load the resulting wordcounts from the store, 
+    //    log some basic statisitics, and write them to a .tsv files
+    timedFuture("main stream")(streamF)
+      .flatMap( _ => store.wordCounts)
+      .onComplete{
+        case Success(wordcounts) =>
+          clearOutputDir()
+          wordcounts.foreach{ case (subreddit, wordcount) =>
+            val fname = s"res/$subreddit.tsv"
+            println(s"write wordcount for $subreddit to $fname")
+            writeTsv(fname, wordcount)
+            println(s"${wordcount.size} discrete words and ${wordcount.values.sum} total words for $subreddit")
+          }
+          as.shutdown()
+        case Failure(err) =>
+          println(s"stream finished with error: $err") 
+          as.shutdown()
+      }
+  }
 ```
     
     1. subreddits
