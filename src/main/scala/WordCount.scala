@@ -31,34 +31,29 @@ object WordCount {
   
   def merge(a: WordCount, b: WordCount): WordCount = a |+| b
 
-  /** transform a stream of subreddit names into a stream of the top comments posted on the top links in that subreddit
-   */
   def fetchComments: Duct[Subreddit, Comment] = 
-    // 0) create a duct that applies no transformations
+    // 0) Create a duct that applies no transformations.
     Duct[Subreddit] 
-        // 1) throttle the rate at which the next step can receive subreddit names
+        // 1) Throttle the rate at which the next step can receive subreddit names.
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
-        // 2) fetch links. Subject to rate limiting
+        // 2) Fetch links. Subject to rate limiting.
         .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) 
-        // 3) flatten a stream of link listings into a stream of links
+        // 3) Flatten a stream of link listings into a stream of links.
         .mapConcat( listing => listing.links ) 
-        // 4) throttle the rate at which the next step can receive links
+        // 4) Throttle the rate at which the next step can receive links.
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
-        // 5) fetch links. Subject to rate limiting
+        // 5) Fetch links. Subject to rate limiting.
         .mapFuture( link => RedditAPI.popularComments(link) ) 
-        // 6) flatten a stream of comment listings into a stream of comments
-        .mapConcat( listing => listing.comments ) 
+        // 6) Flatten a stream of comment listings into a stream of comments.
+        .mapConcat( listing => listing.comments )
 
-  /** this Duct takes a stream of comments and, in batches of 2000 or every 5 seconds, 
-   * whichever comes first, writes them to the store. 
-   * It outputs the size of each batch persisted
-   */
   val persistBatch: Duct[Comment, Int] = 
-    // 0) create a duct that applies no transformations
+    // 0) Create a duct that applies no transformations.
     Duct[Comment]
-        // 1) group comments, emitting a batch every 5000 elements or every 5 seconds, whichever comes first
+        // 1) Group comments, emitting a batch every 5000 elements or every 5 seconds, whichever comes first.
         .groupedWithin(5000, 5 second) 
-        // 2) group comments by subreddit and write wordcount for each group to the store
+        // 2) Group comments by subreddit and write wordcount for each group to the store.
+        //    Outputs the size of each batch after it is persisted.
         .mapFuture{ batch => 
           val grouped: Map[Subreddit, WordCount] = batch
             .groupBy(_.subreddit)
@@ -68,18 +63,22 @@ object WordCount {
         }
 
   def main(args: Array[String]): Unit = {
-    val subreddits: Flow[Subreddit] =  // create the initial Flow of Subreddits from either the cmd line input or reddit's popular subreddit api call
-      if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity) //intialize a flow from the result of a Future
-      else Flow(args.toVector) //initialize a flow from a vector
+    // 0) Create a Flow of Subreddit names from cmd line input or the results of an API call.
+    val subreddits: Flow[Subreddit] =
+      if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity)
+      else Flow(args.toVector)
 
-    // append ducts to the initial flow and materialize it using forEach
+    // 1) Append ducts to the initial flow and materialize it using forEach. 
+    //    The resulting future will succeed if stream processing completes 
+    //    or fail if an error occurs.
     val streamF: Future[Unit] = 
       subreddits
         .append(fetchComments)
         .append(persistBatch)
         .foreach{ n => println(s"persisted $n comments")}
 
-    // when the stream completes, write the contents of the store to per-subreddit .tsv files
+    // 2) When stream processing is finished, load the resulting wordcounts from the store, 
+    //    log some basic statisitics, and write them to a .tsv files
     timedFuture("main stream")(streamF)
       .flatMap( _ => store.wordCounts)
       .onComplete{

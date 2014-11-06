@@ -109,8 +109,8 @@ final append: no processing has occured, no api calls made. We've just described
 Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] \(created using the result of the popular Subreddits api call or the list of subreddits provided as command line arguments if present\)
 
 
-    ```scala
-    ```
+```scala
+```
     
     1. subreddits
         + args as vector -> flow
