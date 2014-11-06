@@ -35,10 +35,6 @@ Naive Solution:
 Since our API functions yield futures, the simplest possible solution is to use flatMap and Future.sequence to chain together functions.
 
 ```scala
-object Simple {
-  import RedditAPI._
-  import ExecutionContext.Implicits.global
-
   def fetchPopularLinks(): Future[Seq[Link]] = 
     popularSubreddits
       .flatMap( subreddits => Future.sequence(subreddits.map(popularLinks)) )
@@ -52,9 +48,10 @@ object Simple {
   def run(){
     val linksF = fetchPopularLinks()
     val commentsF = fetchPopularComments(linksF)
-    commentsF.onSuccess{ case comments: Seq[Comment] => println(s"fetched ${comments.length} comments") }
+    commentsF.onSuccess{ case comments: Seq[Comment] => 
+        println(s"fetched ${comments.length} comments")
+    }
   }
-}
 ```
 
 This fetches a list of subreddit names, then immediately issues requests for the top links for each subreddit. After fetching the links, it issues requests for the top comments for each link. This pattern of issuing bursts of requests works fine at first, then starts failing with 503: service unavailable errors as rate limiting kicks in. Try it for yourself: open up a console and type 'main.Simple.run()' (you'll want to kill the process after seeing the expected stream of 503 errors)
@@ -65,7 +62,8 @@ Streams
 
 What we want is to issue requests at configurable intervals. This will stop us from getting blocked for berzerking their servers with thousands of requests in a short amount of time. (However you feel about reddit as a community, DDOS'ing them is still rude)
 
-We're going to do this using akka's new stream library. Let's start by describing the transformations our stream will need to perform. We'll do this using Duct's, <dscrpt/link>
+We're going to do this using akka's new stream library. Let's start by describing the transformations our stream will need to perform using Ducts and Duct combinator functions.
+Explain concept of ducts in brief, link to scaladoc.
 
 We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will issue API calls to get links for each subreddit, comments for each link, etc.
 
