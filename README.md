@@ -70,25 +70,7 @@ We're going to do this using akka's new stream library. Let's start by describin
 We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will need to issue API calls to get links for each subreddit, comments for each link, etc.
 
     ```scala
-    val redditAPIRate = 250 millis
-    
-    case object Tick
-    val throttle = Flow(redditAPIRate, redditAPIRate, () => Tick)
-        
-    /** transforms a stream of subreddits into a stream of the top comments
-     *  posted in each of the top threads in that subreddit
-     */
-    def fetchComments: Duct[Subreddit, Comment] = 
-        Duct[Subreddit] // create a Duct[Subreddit, Subreddit]
-            .zip(throttle.toPublisher).map{ case (t, Tick) => t }
-            .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) )
-            .mapConcat( listing => listing.links )
-            .zip(throttle.toPublisher).map{ case (t, Tick) => t }
-            .mapFuture( link => RedditAPI.popularComments(link) )
-            .mapConcat( listing => listing.comments )
     ```
-        1. Duct.apply: `Duct[Subreddit, Subreddit]`
-            First, create a duct that doesn't apply any transformations.
         2. zip (w/ throttle): `Duct[Subreddit, Subreddit]
             then zip it with throttle, a flow which produces a stream of `Tick` objects at regular intervals, and throw away the `Tick` objects. Since the zip step only emits elements when both streams have an element present, this produces a throttled stream that emits Subreddit names every 250 millis at most.
         3. mapFuture: `Duct[Subreddit, LinkListing]`
@@ -105,19 +87,7 @@ We're going to need a Duct[Subreddit, Comment] to turn our starting stream of su
 
   We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
     ```scala
-    val persistBatch: Duct[Comment, Int] = 
-        Duct[Comment]
-            .groupedWithin(1000, 5 second) // group comments to avoid excessive IO
-            .mapFuture{ batch => 
-                val grouped: Map[Subreddit, WordCount] = batch
-                    .groupBy(_.subreddit)
-                    .mapValues(_.map(_.toWordCount).reduce(merge))
-                val fs = grouped.map{ case (subreddit, wordcount) => store.addWords(subreddit, wordcount) }
-                Future.sequence(fs).map{ _ => batch.size }
-            }
     ```
-        1. groupedWithin: `Duct[Comment, Seq[Comment]]`
-            group elements, emitting seq's of them with some match batch size & duration.
         2. mapFuture: `Duct[Comment, Int]`
             Group each batch of comments by subreddit, convert them to word counts, merge them, and write them to the store.
             Use mapFuture to fold the result into the stream.
@@ -127,15 +97,6 @@ Having created these high-level descriptions of computations to be performed, we
 
 
     ```scala
-    val subreddits: Flow[String] = 
-        if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity)
-        else Flow(args.toVector)
-
-    val streamF: Future[Unit] = 
-        subreddits
-        .append(fetchComments)
-        .append(persistBatch)
-        .foreach{ n => println(s"persisted $n comments")}
     ```
     
     1. subreddits

@@ -16,17 +16,13 @@ import scalaz._
 import Scalaz._
 
 
-// todo: per/reddit store, per-reddit output TSV.
 object WordCount {
   implicit val as = ActorSystem()
   implicit val ec = as.dispatcher
   val settings = MaterializerSettings(as)
   implicit val mat = FlowMaterializer(settings)
 
-  val defaultSubreddits: Vector[Subreddit] = Vector("LifeProTips","explainlikeimfive","Jokes","askreddit", "funny", "news")
-
   val store = new KVStore
-
 
   val redditAPIRate = 250 millis
 
@@ -39,20 +35,20 @@ object WordCount {
    *  a stream of the top comments posted in each of the top threads in that subreddit
    */
   def fetchComments: Duct[Subreddit, Comment] = 
-    Duct[Subreddit] // create a Duct[Subreddit, Subreddit]
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the stream of subreddits
-        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) // for each subreddit, fetch popular links and emit the resulting link listing
-        .mapConcat( listing => listing.links ) // flatten the stream of link listings into a stream of links
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the stream of links
-        .mapFuture( link => RedditAPI.popularComments(link) ) // get popular comments for each subreddit and emit the resulting comment listing
-        .mapConcat( listing => listing.comments ) // flatten the stream of comment listings into a stream of comments
+    Duct[Subreddit] // first, create a duct that doesn't apply any transformations
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives subreddit names
+        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) // fetch links. Subject to rate limiting
+        .mapConcat( listing => listing.links ) // flatten a stream of link listings into a stream of links
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives links
+        .mapFuture( link => RedditAPI.popularComments(link) ) // fetch links. Subject to rate limiting
+        .mapConcat( listing => listing.comments ) // flatten a stream of comment listings into a stream of comments
 
   /** this Duct takes a stream of comments and, in batches of 2000 or every 5 seconds, 
    * whichever comes first, writes them to the store. 
    * It outputs the size of each batch persisted
    */
   val persistBatch: Duct[Comment, Int] = 
-    Duct[Comment]
+    Duct[Comment]  // first, create a duct that doesn't apply any transformations
         .groupedWithin(2000, 5 second) // group comments to avoid excessive IO. Emits Seq[Comment]'s every 2000 elements or 5 seconds, whichever comes first
         .mapFuture{ batch => 
           val grouped: Map[Subreddit, WordCount] = batch
@@ -64,8 +60,8 @@ object WordCount {
 
   def main(args: Array[String]): Unit = {
     val subreddits: Flow[Subreddit] =  // create the initial Flow of Subreddits from either the cmd line input or reddit's popular subreddit api call
-      if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity)
-      else Flow(args.toVector)
+      if (args.isEmpty) Flow(RedditAPI.popularSubreddits).mapConcat(identity) //intialize a flow from the result of a Future
+      else Flow(args.toVector) //initialize a flow from a vector
 
     // append ducts to the initial flow and materialize it using forEach
     val streamF: Future[Unit] = 
