@@ -34,13 +34,20 @@ object WordCount {
   /** transform a stream of subreddit names into a stream of the top comments posted on the top links in that subreddit
    */
   def fetchComments: Duct[Subreddit, Comment] = 
-    Duct[Subreddit] // first, create a duct that doesn't apply any transformations
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives subreddit names
-        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) // fetch links. Subject to rate limiting
-        .mapConcat( listing => listing.links ) // flatten a stream of link listings into a stream of links
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } // throttle the rate at which the next step receives links
-        .mapFuture( link => RedditAPI.popularComments(link) ) // fetch links. Subject to rate limiting
-        .mapConcat( listing => listing.comments ) // flatten a stream of comment listings into a stream of comments
+    // 0) create a duct that applies no transformations
+    Duct[Subreddit] 
+        // 1) throttle the rate at which the next step can receive subreddit names
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
+        // 2) fetch links. Subject to rate limiting
+        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) 
+        // 3) flatten a stream of link listings into a stream of links
+        .mapConcat( listing => listing.links ) 
+        // 4) throttle the rate at which the next step can receive links
+        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
+        // 5) fetch links. Subject to rate limiting
+        .mapFuture( link => RedditAPI.popularComments(link) ) 
+        // 6) flatten a stream of comment listings into a stream of comments
+        .mapConcat( listing => listing.comments ) 
 
   /** this Duct takes a stream of comments and, in batches of 2000 or every 5 seconds, 
    * whichever comes first, writes them to the store. 
