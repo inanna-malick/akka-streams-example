@@ -85,15 +85,25 @@ We're going to need a Duct[Subreddit, Comment] to turn our starting stream of su
         .mapFuture( link => RedditAPI.popularComments(link) ) 
         // 6) flatten a stream of comment listings into a stream of comments
         .mapConcat( listing => listing.comments ) 
-```(link to line # and file)
+```
 
 
-  We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
-    ```scala
-    ```
-        2. mapFuture: `Duct[Comment, Int]`
-            Group each batch of comments by subreddit, convert them to word counts, merge them, and write them to the store.
-            Use mapFuture to fold the result into the stream.
+We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
+```scala
+  val persistBatch: Duct[Comment, Int] = 
+    // 0) create a duct that applies no transformations
+    Duct[Comment]
+        // 1) group comments, emitting a batch every 5000 elements or every 5 seconds, whichever comes first
+        .groupedWithin(5000, 5 second) 
+        // 2) group comments by subreddit and write wordcount for each group to the store
+        .mapFuture{ batch => 
+          val grouped: Map[Subreddit, WordCount] = batch
+            .groupBy(_.subreddit)
+            .mapValues(_.map(_.toWordCount).reduce(merge))
+          val fs = grouped.map{ case (subreddit, wordcount) => store.addWords(subreddit, wordcount) }
+          Future.sequence(fs).map{ _ => batch.size }
+        }
+```
 
 final append: no processing has occured, no api calls made. We've just described what we want to do. Now make it so.
 Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] \(created using the result of the popular Subreddits api call or the list of subreddits provided as command line arguments if present\)
