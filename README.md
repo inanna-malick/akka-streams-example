@@ -3,7 +3,7 @@ Scraping Reddit with Akka Streams 0.9
 
 Motivation
 ----------
-Reddit offers convenient APIs for accessing content. In this post, I'm going to walk you through using akka-streams to grab the top X comments for each of the top Y posts in each of the top Z subreddits, persisting wordcounts for each subreddit, and writing the results to disk as TSV files. Since we'd like to be good internet citizens, (and not get our IP banned) we want to issue these api calls at consistient intervals, instead of short bursts. 
+Reddit offers convenient APIs for accessing content. In this post, I'm going to walk you through using akka-streams to grab the top X comments for each of the top Y posts in each of the top Z subreddits, persist wordcounts for each subreddit, and write the results to disk as .tsv files. Since we'd rather not have our IPs banned, we want to issue these api calls at consistient intervals, instead of short bursts. 
 
 API Sketch:
 -----------
@@ -54,15 +54,15 @@ def run(){
 }
 ```
 
-This fetches a list of subreddit names, then immediately issues requests for the top links for each subreddit. After fetching the links, it issues requests for the top comments for each link. This pattern of issuing bursts of requests works fine at first, then starts failing with 503: service unavailable errors as rate limiting kicks in. Try it for yourself: open up a console and type 'main.Simple.run()' (you'll want to kill the process after seeing the expected stream of 503 errors)
+This example fetches a list of subreddit names, then issues a batch of requests for the top links in each subreddit. After fetching the links, it issues requests for the top comments on each link. This pattern of issuing bursts of requests works fine at first, then starts failing with 503: service unavailable errors as Reddit's rate limiting kicks in. Try it for yourself: open up a console and type 'main.Simple.run()' (you'll want to kill the process after calls start failing with 503 errors)
 
 
 Streams
 -------
 
-What we want is to issue requests at configurable intervals. This will stop us from getting blocked for berzerking their servers with thousands of requests in a short amount of time. (However you feel about reddit as a community, DDOS'ing them is still rude)
+What we want is to issue requests at some regular interval. This will stop us from getting blocked for berzerking their servers with thousands of requests in a short amount of time.
 
-We're going to do this using akka's new stream library. Let's start by describing the transformations our stream will need to perform using Ducts and Duct combinator functions.
+We're going to do this using akka's new stream library. First, we will build our transformation pipeline using Ducts.
 Explain concept of ducts in brief, link to scaladoc.
 
 We're going to need a Duct[Subreddit, Comment] to turn our starting stream of subreddits into a stream of comments. It will issue API calls to get links for each subreddit, comments for each link, etc.
@@ -87,6 +87,7 @@ def fetchComments: Duct[Subreddit, Comment] =
 
 
 We're also going to use a Duct[Comment, Int] to persist batches of comments, outputing the size of the persisted batches. 
+
 ```scala
 val persistBatch: Duct[Comment, Int] = 
   // 0) Create a duct that applies no transformations.
@@ -108,10 +109,13 @@ val persistBatch: Duct[Comment, Int] =
       }
 ```
 
-note that the above are vals, not defs. They can be reused, and no processing occurs until they are materialized. Cool, no?
+note that the above are vals, not defs. They can be reused, and no processing occurs until they are materialized. Cool, no? 
+    - except for the throttle.toPublisher calls :(. nvm.
 
 final append: no processing has occured, no api calls made. We've just described what we want to do. Now make it so.
-Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] \(created using the result of the popular Subreddits api call or the list of subreddits provided as command line arguments if present\)
+Having created these high-level descriptions of computations to be performed, we can then append them to a Flow\[Subreddit\] and materialize.
+- explain what is a flow. sim detail to duct.
+- explain materializing stream. link to reactivestream sub/pub interface, mention that it's built on top of actors
 
 
 ```scala
@@ -138,15 +142,10 @@ Having created these high-level descriptions of computations to be performed, we
     //    and write them to a .tsv files (code omited for brevity)
   }
 ```
-    
-    1. subreddits
-        + args as vector -> flow
-        + future result -> flow (+ mapConcat, but that's explained above)
-
-    2. append(s)
-
-    3. foreach (consumes stream, runs a function on each resulting element
 
 Closing: 
 --------
-things that could be better, mention new flow graph for complex topologies. (this is scalaDSL, see scalaDSL2 for the newness). Also props to akka dudes, vKlang for talk, dataxu for hosting
+
+1. scaladsl2. Has flow graphs for complex topos, new combinators like mapAsync (mapFuture w/o order, could keep occasional long-running calls from holding up the stream)
+    - rewritten in branch, but no zip combinator yet
+2. thanks akka dudes, vKlang for talk and dataxu for hosting, obligatory thanks to Aquto for being forward looking
