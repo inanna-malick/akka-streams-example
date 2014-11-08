@@ -3,7 +3,7 @@ Scraping Reddit with Akka Streams 0.9
 
 Motivation
 ----------
-Reddit offers convenient APIs for accessing content. In this post, I'm going to walk you through using akka-streams to grab the top X comments for each of the top Y posts in each of the top Z subreddits, persist wordcounts for each subreddit, and write the results to disk as .tsv files. Since we'd rather not have our IPs banned, we want to issue these api calls at consistient intervals, instead of short bursts. 
+Reddit offers convenient APIs for accessing content. In this post, I'm going to walk you through using akka-streams to grab the top X comments for each of the top Y posts in each of the top Z subreddits, persist wordcounts for each subreddit, and write the results to disk as .tsv files. Since we'd rather not have our IPs banned, we want to issue these API calls at consistent intervals, instead of short bursts. 
 
 API Sketch:
 -----------
@@ -59,22 +59,21 @@ This example fetches a list of subreddit names, then issues a batch of requests 
 
 Streams 101
 -----------
-Reactive Stream Primitives: link to reactive streams website
-- subscribers
-- producers
-- there are a few more interfaces, here's the spec: https://github.com/reactive-streams/reactive-streams/blob/v0.3/tck/src/main/resources/spec.md
-- these are live streams, materialized streams, that can process elements and exert backpressure.
 
-ScalaDSL
-- these are stream descriptors, that can be materialized into streams composed of reactive stream primitives. This is an important distinction.
+[Scala DSL](http://doc.akka.io/api/akka-stream-and-http-experimental/0.9/index.html#akka.stream.scaladsl.package): This domain specific language is used to create immutable stream descriptions that can be shared, composed, and materialized to create live streams composed of reactive stream primitives.
 - Flows: stream descriptions with an open input. Can be attached to a subscriber and materialized, or consumed directly with foreach.
 - Ducts: Flows, but with hanging input and output. Can be attached to a producer and subscriber, or appended to a flow
-- Duct is a free-floating transformation pipeline to which a subscriber and producer can be attached. They can be appended to eachother, or to flows, which describe producers of values
+- Duct is a free-floating transformation pipeline to which a subscriber and producer can be attached. They can be appended to each other, or to flows, which describe producers of values
+
+[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams): Streams built from these primitives are live streams, that can process elements and exert backpressure. They are what is created when Scala DSL entities are materialized.
+- A Subscriber is a component that accepts a sequenced stream of elements provided by a Publisher. It can 
+- A Publisher is a provider of a potentially unbounded number of sequenced elements, publishing them according to the demand received from its Subscriber(s).
+
 
 Less Naive Solution
 -------------------
 
-What we want is to issue requests at some regular interval. This will stop us from getting blocked for berzerking their servers with thousands of requests in a short amount of time. We're going to do this using akka's new stream library. First, we will build our transformation pipeline using Ducts. For now, assume we have some source of Subreddit names.
+What we want is to issue requests at some regular interval. This will stop us from getting blocked for berserking their servers with thousands of requests in a short amount of time. We're going to do this using Akka's new stream library. First, we will build our transformation pipeline using Ducts. For now, assume we have some source of Subreddit names.
     
 
 First we need a Duct[Subreddit, Comment] to turn the stream of subreddits produced by that source into a stream of comments from different subreddits. 
@@ -98,7 +97,7 @@ def fetchComments: Duct[Subreddit, Comment] =
 ```
 
 
-We're also going to need to calculate wordcounts and write them to some store, ideally saving up comments to avoid an IO operation per comment. 
+We're also going to need to calculate word counts and write them to some store, ideally saving up comments to avoid an IO operation per comment. 
 
 ```scala
 val persistBatch: Duct[Comment, Int] = 
@@ -121,8 +120,7 @@ val persistBatch: Duct[Comment, Int] =
       }
 ```
 
-//todo: use the word composable
-final append: no processing has occured, no calls made to reddit. We've just described what we want to do. Now we make it so.
+So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of Subreddit names to which we append the Ducts created in the last two steps, yielding a single `Flow[Int]` the we can materialize and run.
 
 ```scala
   def main(args: Array[String]): Unit = {
@@ -152,7 +150,5 @@ final append: no processing has occured, no calls made to reddit. We've just des
 Closing: 
 --------
 
-1. New DSL: scaladsl2. 
-    - main feature is flow graphs for complex topos, http://akka.io/news/2014/09/12/akka-streams-0.7-released.html
-    - new combinators like mapAsyncUnordered, equiv to mapFuture w/o order preservation, avoid halting stream processing to wait for the occasional long-running call to finish
-2. Thanks to the Akka team and everyone at Typesafe for great open source software, vKlang specifically for coming to the US to give a talk and DataXu for hosting it, and of course thanks to my employer Aquto for letting me work with cool new technology.
+1. New Scala DSL. Largely similar, supports building complex [flow graphs](http://akka.io/news/2014/09/12/akka-streams-0.7-released.html). I'll rewrite this using the new DSL at some point, probably after akka-streams 1.0 comes out. It also offers new combinators such as mapAsyncUnordered, which is identical to mapFuture except for not preserving order. This can be used to allow stream processing to continue at speed despite the occasional long-running call.
+2. Thanks to the Akka team and everyone at Typesafe for great open source software, Viktor Klang for coming to the US to give a talk and DataXu for hosting it, and of course thanks to my employer Aquto for letting me work with cool new technology.
