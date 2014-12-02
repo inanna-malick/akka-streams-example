@@ -2,18 +2,14 @@ package main
 
 import akka.actor.ActorSystem
 import akka.stream.{MaterializerSettings, FlowMaterializer}
-import akka.stream.scaladsl.{Flow, Duct}
+import akka.stream.scaladsl._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.concurrent.duration._
 import scala.collection.immutable.{Vector, Seq}
 import Util._
 
-import scala.io.Source
 import scala.util.{Failure, Success}
-
-import scalaz._
-import Scalaz._
 
 
 object WordCount {
@@ -26,37 +22,53 @@ object WordCount {
 
   val redditAPIRate = 250 millis
 
-  case object Tick
-  val throttle = Flow(redditAPIRate, redditAPIRate, () => Tick)
+  //val throttle = Flow(redditAPIRate, redditAPIRate, () => Tick)
   
-  def merge(a: WordCount, b: WordCount): WordCount = a |+| b
+  def merge(a: WordCount, b: WordCount): WordCount = {
+    import scalaz._
+    import Scalaz._
 
-  def fetchComments: Duct[Subreddit, Comment] = 
+    a |+| b
+  }
+
+  def throttled[T]: Flow[T, T] = {
+        val tickSource = TickSource(redditAPIRate, redditAPIRate, () => () )
+    	val zip = Zip[T, Unit]
+        val in = UndefinedSource[T]
+        val out = UndefinedSink[T]
+	PartialFlowGraph{ implicit builder =>
+	  import FlowGraphImplicits._
+	  in ~> zip.left  ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
+	  tickSource ~> zip.right
+	}.toFlow(in, out)
+  }
+
+  def fetchComments: Flow[Subreddit, Comment] = 
     // 0) Create a duct that applies no transformations.
-    Duct[Subreddit] 
+    Flow[Subreddit] 
         // 1) Throttle the rate at which the next step can receive subreddit names.
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
         // 2) Fetch links. Subject to rate limiting.
-        .mapFuture( subreddit => RedditAPI.popularLinks(subreddit) ) 
+        .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) ) 
         // 3) Flatten a stream of link listings into a stream of links.
         .mapConcat( listing => listing.links ) 
         // 4) Throttle the rate at which the next step can receive links.
         .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
         // 5) Fetch links. Subject to rate limiting.
-        .mapFuture( link => RedditAPI.popularComments(link) ) 
+        .mapAsyncUnordered( link => RedditAPI.popularComments(link) ) 
         // 6) Flatten a stream of comment listings into a stream of comments.
         .mapConcat( listing => listing.comments )
 
-  val persistBatch: Duct[Comment, Int] = 
+  val persistBatch: Flow[Comment, Int] = 
     // 0) Create a duct that applies no transformations.
-    Duct[Comment]
+    Flow[Comment]
         // 1) Group comments, emitting a batch every 5000 elements
         //    or every 5 seconds, whichever comes first.
         .groupedWithin(5000, 5 second) 
         // 2) Group comments by subreddit and write the wordcount 
         //    for each group to the store. This step outputs 
         //    the size of each batch after it is persisted.
-        .mapFuture{ batch => 
+        .mapAsyncUnordered{ batch => 
           val grouped: Map[Subreddit, WordCount] = batch
             .groupBy(_.subreddit)
             .mapValues(_.map(_.toWordCount).reduce(merge))
@@ -69,19 +81,19 @@ object WordCount {
   def main(args: Array[String]): Unit = {
     // 0) Create a Flow of Subreddit names, using either
     //    the argument vector or the result of an API call.
-    val subreddits: Flow[Subreddit] =
+    val subreddits: Source[Subreddit] =
       if (args.isEmpty) 
-        Flow(RedditAPI.popularSubreddits).mapConcat(identity)
+        Source(RedditAPI.popularSubreddits).mapConcat(identity)
       else
-        Flow(args.toVector)
+        Source(args.toVector)
 
     // 1) Append ducts to the initial flow and materialize it via forEach. 
     //    The resulting future succeeds if stream processing completes 
     //    or fails if an error occurs.
     val streamF: Future[Unit] = 
       subreddits
-        .append(fetchComments)
-        .append(persistBatch)
+        .via(fetchComments)
+        .via(persistBatch)
         .foreach{ n => println(s"persisted $n comments")}
 
     // 2) When stream processing is finished, load the resulting 
