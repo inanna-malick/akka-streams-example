@@ -31,6 +31,8 @@ object WordCount {
     a |+| b
   }
 
+
+  //todo: single source of ticks, split between all zips...
   def throttled[T]: Flow[T, T] = {
         val tickSource = TickSource(redditAPIRate, redditAPIRate, () => () )
     	val zip = Zip[T, Unit]
@@ -43,17 +45,17 @@ object WordCount {
 	}.toFlow(in, out)
   }
 
-  def fetchComments: Flow[Subreddit, Comment] = 
+  val fetchComments: Flow[Subreddit, Comment] = 
     // 0) Create a duct that applies no transformations.
     Flow[Subreddit] 
         // 1) Throttle the rate at which the next step can receive subreddit names.
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
+        .via(throttled)
         // 2) Fetch links. Subject to rate limiting.
         .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) ) 
         // 3) Flatten a stream of link listings into a stream of links.
         .mapConcat( listing => listing.links ) 
         // 4) Throttle the rate at which the next step can receive links.
-        .zip(throttle.toPublisher).map{ case (t, Tick) => t } 
+        .via(throttled)
         // 5) Fetch links. Subject to rate limiting.
         .mapAsyncUnordered( link => RedditAPI.popularComments(link) ) 
         // 6) Flatten a stream of comment listings into a stream of comments.
