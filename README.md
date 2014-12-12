@@ -1,14 +1,10 @@
 Scraping Reddit with Akka Streams 0.9
 =====================================
 
-Motivation
-----------
-Reddit offers convenient APIs for accessing content. In this post, I'm going to walk you through using akka-streams to grab the top X comments for each of the top Y posts in each of the top Z subreddits, persist wordcounts for each subreddit, and write the results to disk as .tsv files. 
+Reddit offers convenient APIs for accessing content. In this post, I'm going to walk through the process of using akka-streams to fetch the top comments for each of the top posts in each of Reddit's top subreddits.
 
 API Sketch:
 -----------
-
-We'll be working with the following API. RedditAPI 
 
 
 ```scala
@@ -29,7 +25,8 @@ trait KVStore { // in-memory key store that supports adding words to pre-subredd
     def addWords(subreddit: String, words: WordCount): Future[Unit]
     // get word counts for every subreddit
     def wordCounts: Future[Map[String, WordCount]]
-}```
+}
+```
 
 Naive Solution:
 --------------
