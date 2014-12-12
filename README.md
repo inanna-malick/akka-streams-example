@@ -1,7 +1,8 @@
 Scraping Reddit with Akka Streams 1.0
 =====================================
 
-"Reactive Streams is an initiative to provide a standard for asynchronous stream processing with non-blocking back pressure on the JVM."
+> Reactive Streams is an initiative to provide a standard for asynchronous stream processing with non-blocking back pressure on the JVM.
+
 
 Akka Streams provides a DSL for describing stream processing steps that are then materialized to create reactive streams implemented on top of Akka actors. In this post I describe the process of using akka-streams to fetch the most popular comments on reddit for some set of subreddits and persist word counts.
 
