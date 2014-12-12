@@ -53,12 +53,12 @@ This example fetches a list of subreddit names, issues simultaneous requests for
 Streams 101
 -----------
 
-[Scala DSL](http://doc.akka.io/api/akka-stream-and-http-experimental/1.0-M1/index.html#akka.stream.scaladsl.package): This domain specific language is used to create immutable stream descriptions that can be shared, composed, and materialized to create live streams composed of reactive stream primitives.
+[Scala DSL](http://doc.akka.io/api/akka-stream-and-http-experimental/1.0-M1/index.html#akka.stream.scaladsl.package): DSL for creating immutable stream processing descriptions that can be reused, composed, and materialized to create live streams composed of reactive stream primitives.
 - `Source[Out]`: a set of stream processing steps that has one open output and an attached input. Can be used as a Publisher.
 - `Flow[In,Out]`: a set of stream processing steps that has one open input and one open output.
 - `Sink[In]`: a set of stream processing steps that has one open input and an attached output. Can be used as a Subscriber.
 
-[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams): Streams built from these primitives are live streams, that can process elements and exert backpressure. They are what is created when Scala DSL entities are materialized.
+[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams):
 - `Subscriber[In]`: a component that accepts a sequenced stream of elements provided by a Publisher.
 - `Publisher[Out]`: a provider of a potentially unbounded number of sequenced elements, publishing them according to the demand received from its Subscriber(s).
 
