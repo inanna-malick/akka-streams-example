@@ -48,7 +48,7 @@ object SimpleExample {
     } yield comments
 }
 ```
-This example fetches a list of subreddit names, issues simultaneous requests for the top links of each, then issues a request for comments. Try it for yourself: open up a console and type `main.SimpleExample.run`. You'll see a burst of link listing requests which quickly start to fail as Reddit's servers rate limit your machine.
+This example fetches a list of subreddit names, issues simultaneous requests for the top links of each, then issues requests for comments for each link. Try it for yourself: open up a console and type `main.SimpleExample.run`. You'll see a burst of link listing requests which quickly start to fail as Reddit's servers rate limit your machine.
 
 Streams 101
 -----------
@@ -76,8 +76,9 @@ First, we need a way to throttle a stream down to 1 message per time unit. We'll
     val out = UndefinedSink[T]
     PartialFlowGraph{ implicit builder =>
       import FlowGraphImplicits._
-      in ~> zip.left  ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
+      in ~> zip.left
       tickSource ~> zip.right
+      zip.out ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
     }.toFlow(in, out)
   }
 ```
