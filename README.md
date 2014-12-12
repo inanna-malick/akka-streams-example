@@ -143,7 +143,7 @@ The next step calculates word counts for each comment and writes them to the sto
         }
 ```
 
-So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of String names to which we append the Flow created in the previous steps, yielding a single `Source[Int]` that we can materialize and run.
+So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of subreddit names to which we append the Flows created in the previous steps, yielding a single `Source[Int]` that we can materialize and run using foreach.
 
 ```scala
 def main(args: Array[String]): Unit = {
