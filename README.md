@@ -64,9 +64,7 @@ Streams 101
 
 
 Streams Solution
--------------------
-
-We want is to issue requests at some regular interval. This will stop us from getting blocked for berserking their servers with thousands of requests in a short amount of time. First, we'll define a processing pipeline, then we'll construct a source of subreddits to connect it to.
+----------------
 
 First, we need a way to throttle a stream, such that it's limited to 1 message per time unit. We'll use the graph DSL to build a partial graph, a graph with a single undefined sink and source which can be used as a stream.
 
