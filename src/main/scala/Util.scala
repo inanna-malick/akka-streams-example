@@ -16,7 +16,7 @@ import java.nio.charset.StandardCharsets
 object Util {
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
-    println(s"--> started $name at instant $start")
+    println(s"--> started $name")
     f.andThen{
       case Success(t) =>
         val end = System.currentTimeMillis()
