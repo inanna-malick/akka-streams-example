@@ -146,20 +146,20 @@ We're also going to need to calculate word counts and write them to some store, 
         }
 ```
 
-So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of String names to which we append the Ducts created in the last two steps, yielding a single `Flow[Int]` the we can materialize and run.
+So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of String names to which we append the Flow created in the previous steps, yielding a single `Source[Int]` the we can materialize and run.
 
 ```scala
 def main(args: Array[String]): Unit = {
-    // 0) Create a Flow of String names, using either
-    //    the argument vector or the result of an API call.
+    // 0) Create a Source of String names, using either the provided
+    //    argument vector or the result of the popularSubreddits API call.
     val subreddits: Source[String] =
       if (args.isEmpty)
         Source(RedditAPI.popularSubreddits).mapConcat(identity)
       else
         Source(args.toVector)
 
-    // 1) Append ducts to the initial flow and materialize it via forEach.
-    //    The resulting future succeeds if stream processing completes
+    // 1) Append flows to the initial source and materialize it via forEach.
+    //    The resulting future succeeds if stream processing completes 
     //    or fails if an error occurs.
     val streamF: Future[Unit] =
       subreddits
