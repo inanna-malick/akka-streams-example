@@ -48,24 +48,22 @@ object Util {
     } file.delete()
 
   type WordCount = Map[String, Int]
-  type Subreddit = String  
 }
 
 
 class KVStore(implicit val ec: ExecutionContext) {
-  private val commentCount: Store[Map[Subreddit,WordCount]] = new Store
+  private val commentCount: Store[Map[String,WordCount]] = new Store
 
-  def addWords(subreddit: Subreddit, words: WordCount): Future[Unit] = {
+  def addWords(subreddit: String, words: WordCount): Future[Unit] = {
     commentCount.update(Map(subreddit -> words))
   }
 
-  def wordCounts: Future[Map[Subreddit, WordCount]] = commentCount.read
+  def wordCounts: Future[Map[String, WordCount]] = commentCount.read
 }
 
-// jury-rigged value store
 class Store[T](implicit val m: Monoid[T], implicit val ec: ExecutionContext) {
   private val store: Agent[T] = Agent(m.zero)
-  
+
   def update(in: T): Future[Unit] =
     store.alter(m.append(_, in)).map( _ => () )
 
