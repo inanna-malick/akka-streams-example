@@ -87,7 +87,8 @@ We'll use the graph DSL to build a partial graph, a graph with a single undefine
   }
 ```
 
-this code constructs a stream-processing graph with the following structure, then converts it to a flow from `in` to `out`.
+This code constructs the following partial stream-processing graph
+
 ```
 +------------+
 | tickSource +-Unit-+
@@ -97,9 +98,11 @@ this code constructs a stream-processing graph with the following structure, the
 | in +----T---------+
 +----+
 ````
+Finally, the graph is converted to a flow from the vertex `in` to the vertex `out`.
 
 
-Using throttle, we then define a Flow[String, Comment] which handles all interactions with Reddit's API.
+
+Using throttle, we can now define a Flow[String, Comment] which handles all interactions with Reddit's API.
 
 ```scala
   val fetchComments: Flow[String, Comment] =
