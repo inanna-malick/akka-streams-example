@@ -49,8 +49,9 @@ object WordCount {
     val out = UndefinedSink[T]
     PartialFlowGraph{ implicit builder =>
       import FlowGraphImplicits._
-      in ~> zip.left  ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
+      in ~> zip.left
       tickSource ~> zip.right
+      zip.out ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
     }.toFlow(in, out)
   }
 
