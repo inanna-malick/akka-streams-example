@@ -58,7 +58,7 @@ Streams 101
 - `Flow[In,Out]`: a set of stream processing steps that has one open input and one open output.
 - `Sink[In]`: a set of stream processing steps that has one open input and an attached output. Can be used as a Subscriber.
 
-[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams): stream primitives which represent live streams. These are created when a stream processing description is materialized.
+[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams): used to represent live streams. These are created when a stream processing description is materialized.
 - `Subscriber[In]`: a component that accepts a sequenced stream of elements provided by a Publisher.
 - `Publisher[Out]`: a provider of a potentially unbounded number of sequenced elements, publishing them according to the demand received from its Subscriber(s).
 
