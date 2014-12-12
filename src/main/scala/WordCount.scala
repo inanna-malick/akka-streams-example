@@ -30,10 +30,21 @@ object WordCount {
   }
 
 
-  //todo: single source of ticks, split between all zips...
-  def throttled[T]: Flow[T, T] = {
-    val tickSource = TickSource(redditAPIRate, redditAPIRate, () => () )
-    val zip = Zip[T, Unit]
+  /**
+    builds the following stream-processing graph.
+    +------------+
+    | tickSource +-Unit-+
+    +------------+      +---> +-----+            +-----+      +-----+
+                              | zip +-(T,Unit)-> | map +--T-> | out |
+    +----+              +---> +-----+            +-----+      +-----+
+    | in +----T---------+
+    +----+
+    tickSource emits one element per `rate` time units and zip only emits when an element is present from its left and right
+    input stream, so the resulting stream can never emit more than 1 element per `rate` time units.
+   */
+  def throttle[T](rate: FiniteDuration): Flow[T, T] = {
+    val tickSource = TickSource(rate, rate, () => () )
+    val zip = Zip[T, Unit] 
     val in = UndefinedSource[T]
     val out = UndefinedSink[T]
     PartialFlowGraph{ implicit builder =>
@@ -43,17 +54,17 @@ object WordCount {
     }.toFlow(in, out)
   }
 
-  val fetchComments: Flow[Subreddit, Comment] =
+  val fetchComments: Flow[String, Comment] =
     // 0) Create a duct that applies no transformations.
-    Flow[Subreddit]
+    Flow[String]
         // 1) Throttle the rate at which the next step can receive subreddit names.
-        .via(throttled)
+        .via(throttle(redditAPIRate))
         // 2) Fetch links. Subject to rate limiting.
         .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) )
         // 3) Flatten a stream of link listings into a stream of links.
         .mapConcat( listing => listing.links )
         // 4) Throttle the rate at which the next step can receive links.
-        .via(throttled)
+        .via(throttle(redditAPIRate))
         // 5) Fetch links. Subject to rate limiting.
         .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
         // 6) Flatten a stream of comment listings into a stream of comments.
@@ -67,21 +78,21 @@ object WordCount {
         .groupedWithin(5000, 5 second)
         // 2) Group comments by subreddit and write the wordcount
         //    for each group to the store. This step outputs
-        //    the size of each batch after it is persisted.
+        //    the size of each batch after it is persisted for logging
         .mapAsyncUnordered{ batch =>
-          val grouped: Map[Subreddit, WordCount] = batch
+          val fs = batch
             .groupBy(_.subreddit)
             .mapValues(_.map(_.toWordCount).reduce(merge))
-          val fs = grouped.map{ case (subreddit, wordcount) =>
+            .map{ case (subreddit, wordcount) =>
               store.addWords(subreddit, wordcount)
             }
           Future.sequence(fs).map{ _ => batch.size }
         }
 
 def main(args: Array[String]): Unit = {
-    // 0) Create a Flow of Subreddit names, using either
+    // 0) Create a Flow of String names, using either
     //    the argument vector or the result of an API call.
-    val subreddits: Source[Subreddit] =
+    val subreddits: Source[String] =
       if (args.isEmpty)
         Source(RedditAPI.popularSubreddits).mapConcat(identity)
       else

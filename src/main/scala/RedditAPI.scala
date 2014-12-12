@@ -18,7 +18,7 @@ object RedditAPI {
 
   val useragent = Map("User-Agent" -> "wordcloud mcgee")
 
-  def popularLinks(subreddit: Subreddit)(implicit ec: ExecutionContext): Future[LinkListing] = 
+  def popularLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing] = 
     withRetry(timedFuture(s"links: r/$subreddit/top"){
       val page = url(s"http://www.reddit.com/r/$subreddit/top.json") <<? Map("limit" -> linksToFetch.toString, "t" -> "all") <:< useragent
       Http(page OK dispatch.as.json4s.Json).map(LinkListing.fromJson(subreddit)(_))
@@ -30,7 +30,7 @@ object RedditAPI {
       Http(page OK dispatch.as.json4s.Json).map(json => CommentListing.fromJson(json, link.subreddit))
     }, CommentListing(link.subreddit, Seq.empty))
 
-  def popularSubreddits(implicit ec: ExecutionContext): Future[Seq[Subreddit]] = 
+  def popularSubreddits(implicit ec: ExecutionContext): Future[Seq[String]] = 
     timedFuture("fetch popular subreddits"){
       val page = url(s"http://www.reddit.com/subreddits/popular.json").GET <<? Map("limit" -> subredditsToFetch.toString) <:< useragent
       Http(page OK dispatch.as.json4s.Json).map{ json =>
@@ -42,47 +42,40 @@ object RedditAPI {
     }
 }
 
-object Simple {
+object SimpleExample {
   import RedditAPI._
   import ExecutionContext.Implicits.global
 
-  def fetchPopularLinks(): Future[Seq[Link]] = 
-    popularSubreddits
-      .flatMap( subreddits => Future.sequence(subreddits.map(popularLinks)) )
-      .map( linkListings => linkListings.flatMap(_.links) )
-
-  def fetchPopularComments(linksF: Future[Seq[Link]]): Future[Seq[Comment]] = 
-    linksF
-      .flatMap( links =>  Future.sequence(links.map(popularComments)))
-      .map( commentListings => commentListings.flatMap(_.comments) )
-
-  def run(){
-    val linksF = fetchPopularLinks()
-    val commentsF = fetchPopularComments(linksF)
-    commentsF.onSuccess{ case comments: Seq[Comment] => println(s"fetched ${comments.length} comments") }
-  }
+  def run =
+    for {
+      subreddits <- popularSubreddits
+      linklistings <- Future.sequence(subreddits.map(popularLinks))
+      links = linklistings.flatMap(_.links)
+      commentListings <- Future.sequence(links.map(popularComments))
+      comments = commentListings.flatMap(_.comments)
+    } yield comments
 }
 
 
 object LinkListing {
-  def fromJson(subreddit: Subreddit)(json: JValue) = {
+  def fromJson(subreddit: String)(json: JValue) = {
     val x = json.\("data").\("children").children.map(_.\("data").\("id")).collect{ case JString(s) => Link(s, subreddit) }
     LinkListing(x)
   }
 }
 case class LinkListing(links: Seq[Link])
-case class Link(id: String, subreddit: Subreddit)
+case class Link(id: String, subreddit: String)
 
 object CommentListing {
-  def fromJson(json: JValue, subreddit: Subreddit) = {
+  def fromJson(json: JValue, subreddit: String) = {
     val x = json.\("data")
       .filterField{case ("body", _) => true; case _ => false }
       .collect{ case ("body", JString(s)) => Comment(subreddit, s)}
     CommentListing(subreddit, x)
   }
 }
-case class CommentListing(subreddit: Subreddit, comments: Seq[Comment])
-case class Comment(subreddit: Subreddit, body: String){
+case class CommentListing(subreddit: String, comments: Seq[Comment])
+case class Comment(subreddit: String, body: String){
   val alpha = (('a' to 'z') ++ ('A' to 'Z')).toSet
 
   def normalize(s: Seq[String]): Seq[String] =
