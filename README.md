@@ -4,7 +4,7 @@ Scraping Reddit with Akka Streams 1.0
 > Reactive Streams is an initiative to provide a standard for asynchronous stream processing with non-blocking back pressure on the JVM.
 > [www.reactive-streams.org/](http://www.reactive-streams.org/)
 
-Akka Streams provide a domain specific language for describing stream processing steps that are then materialized to create reactive streams implemented on top of Akka actors. In this post I describe the process of using Akka Streams to fetch the most popular comments on Reddit for some set of subreddits and persist per-subreddit word counts.
+Akka Streams provide a domain specific language for describing stream processing steps that are then materialized to create reactive streams implemented on top of Akka actors. In this post I explain the process of using Akka Streams to construct a tool for scraping Reddit comments and constructing per-subreddit wordcounts.
 
 API Sketch:
 -----------
@@ -82,7 +82,7 @@ First, we need a way to throttle a stream, such that it's limited to 1 message p
   }
 ```
 
-This code constructs the following partial stream-processing graph
+This code constructs the following partial stream-processing graph.
 
 ```
 +------------+
