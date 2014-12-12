@@ -118,7 +118,7 @@ Using throttle, we can now define a `Flow[String, Comment]` which handles all in
 ```
 
 
-We're also going to need to calculate word counts and write them to some store, ideally saving up comments to avoid an IO operation per comment.
+We're also going to need to calculate word counts and write them to some store, batching writes to avoid excessive IO.
 
 ```scala
  val persistBatch: Flow[Comment, Int] =
