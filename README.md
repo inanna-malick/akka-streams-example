@@ -1,11 +1,12 @@
-Scraping Reddit with Akka Streams 0.9
+Scraping Reddit with Akka Streams 1.0
 =====================================
 
-Reddit offers convenient APIs for accessing content. In this post, I'm going to walk through the process of using akka-streams to fetch the top comments for each of the top posts in each of Reddit's top subreddits.
+"Reactive Streams is an initiative to provide a standard for asynchronous stream processing with non-blocking back pressure on the JVM."
+
+Akka Streams provides a DSL for constructing streams from composable high level descriptions that are then materialized to create running streams. In this post I describe the process of using akka-streams to fetch the most popular comments on reddit for some set of subreddits and persist word counts.
 
 API Sketch:
 -----------
-
 
 ```scala
 type WordCount = Map[String, Int]
@@ -46,32 +47,27 @@ object SimpleExample {
     } yield comments
 }
 ```
-This example fetches a list of subreddit names, issues simultaneous requests for the top links of each, then issues a request for comments. Try it for yourself: open up a console and type main.SimpleExample.run. You'll see a burst of requests which 
-quickly start to fail with 503: service unavailable errors as Reddit's servers start to rate limit the connection.
+This example fetches a list of subreddit names, issues simultaneous requests for the top links of each, then issues a request for comments. Try it for yourself: open up a console and type main.SimpleExample.run. You'll see a burst of requests which quickly start to fail with 503: service unavailable errors as Reddit's servers start to rate limit the connection.
 
 Streams 101
 -----------
 
-//todo: redo completely for 1.0
-
-[Scala DSL](http://doc.akka.io/api/akka-stream-and-http-experimental/0.9/index.html#akka.stream.scaladsl.package): This domain specific language is used to create immutable stream descriptions that can be shared, composed, and materialized to create live streams composed of reactive stream primitives.
-- Source : stream descriptions with an open input. Can be attached to a subscriber and materialized, or consumed directly with foreach.
-- Ducts: Flows, but with hanging input and output. Can be attached to a producer and subscriber, or appended to a flow
-- Duct is a free-floating transformation pipeline to which a subscriber and producer can be attached. They can be appended to each other, or to flows, which describe producers of values
+[Scala DSL](http://doc.akka.io/api/akka-stream-and-http-experimental/1.0-M1/index.html#akka.stream.scaladsl.package): This domain specific language is used to create immutable stream descriptions that can be shared, composed, and materialized to create live streams composed of reactive stream primitives.
+- Source: A Source is a set of stream processing steps that has one open output and an attached input. Can be used as a Publisher.
+- Flow: A Flow is a set of stream processing steps that has one open input and one open output.
+- Sink: A Sink is a set of stream processing steps that has one open input and an attached output. Can be used as a Subscriber.
 
 [Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams): Streams built from these primitives are live streams, that can process elements and exert backpressure. They are what is created when Scala DSL entities are materialized.
-- A Subscriber is a component that accepts a sequenced stream of elements provided by a Publisher. It can 
+- A Subscriber is a component that accepts a sequenced stream of elements provided by a Publisher.
 - A Publisher is a provider of a potentially unbounded number of sequenced elements, publishing them according to the demand received from its Subscriber(s).
 
 
 Streams Solution
 -------------------
 
-What we want is to issue requests at some regular interval. This will stop us from getting blocked for berserking their servers with thousands of requests 
-in a short amount of time. First, we'll define a processing pipeline, then we'll construct a source of subreddits to connect it to.
+What we want is to issue requests at some regular interval. This will stop us from getting blocked for berserking their servers with thousands of requests in a short amount of time. First, we'll define a processing pipeline, then we'll construct a source of subreddits to connect it to.
 
-First, we need a way to throttle a stream, such that it's limited to 1 message per time unit. 
-We'll use the graph DSL to build a partial graph, a graph with a single undefined sink and source which can be used as a stream.
+First, we need a way to throttle a stream, such that it's limited to 1 message per time unit. We'll use the graph DSL to build a partial graph, a graph with a single undefined sink and source which can be used as a stream.
 
 ```scala
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
