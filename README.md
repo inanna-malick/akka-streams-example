@@ -66,7 +66,7 @@ Streams 101
 Streams Solution
 ----------------
 
-First, we need a way to throttle a stream down to 1 message per time unit. We'll use the graph DSL to build a partial graph, a graph with a single undefined source and sink which can converted to a flow from source to sink.
+First, we need a way to throttle a stream down to 1 message per time unit. We'll use the graph DSL to build a partial graph which we then convert to a flow.
 
 ```scala
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
@@ -83,7 +83,7 @@ First, we need a way to throttle a stream down to 1 message per time unit. We'll
   }
 ```
 
-This code constructs the following partial stream-processing graph. Since Zip outputs tuples of T and Unit, it can only emit elements when both `tickSource` and `in` have available elements. Since `tickSource` produces one element per `rate`, this graph can only produce one element per `rate` time units.
+This code constructs the following partial stream-processing graph. Since the Zip vertex outputs tuples of T and Unit, it can only produce elements when both `tickSource` and `in` have available elements. Since `tickSource` produces one element per `rate`, the graph can only produce one element per `rate` time units.
 
 ```
 +------------+
@@ -119,6 +119,7 @@ Using throttle, we can now define a `Flow[String, Comment]` which handles all in
         .mapConcat( listing => listing.comments )
 ```
 Note that `mapAsyncUnordered` does not preserve order, which keeps the rare slow request from slowing down the entire stream. If order is important, use `mapAsync` instead.
+
 
 The next step calculates word counts for each comment and writes them to the store, batching writes to avoid excessive IO.
 
