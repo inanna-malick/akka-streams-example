@@ -66,7 +66,7 @@ object WordCount {
         .mapConcat( listing => listing.links )
         // 4) Throttle the rate at which the next step can receive links.
         .via(throttle(redditAPIRate))
-        // 5) Fetch links. Subject to rate limiting.
+        // 5) Fetch comments. Subject to rate limiting.
         .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
         // 6) Flatten a stream of comment listings into a stream of comments.
         .mapConcat( listing => listing.comments )
