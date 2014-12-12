@@ -2,9 +2,9 @@ Scraping Reddit with Akka Streams 1.0
 =====================================
 
 > Reactive Streams is an initiative to provide a standard for asynchronous stream processing with non-blocking back pressure on the JVM.
-> [www.reactive-streams.org/](http://www.reactive-streams.org/)
+> -[reactive-streams.org](http://www.reactive-streams.org/)
 
-Akka Streams provide a domain specific language for describing stream processing steps that are then materialized to create reactive streams implemented on top of Akka actors. In this post I describe the process of using Akka Streams to fetch the most popular comments on Reddit for some set of subreddits and persist per-subreddit word counts.
+Akka Streams provide a domain specific language for describing stream processing steps that are then materialized to create reactive streams implemented on top of Akka actors. In this post I explain the process of constructing a tool for scraping Reddit comments and constructing per-subreddit wordcounts using Akka Streams.
 
 API Sketch:
 -----------
@@ -31,7 +31,7 @@ trait KVStore { // in-memory key-value store
 Naive Solution:
 --------------
 
-Since our API functions yield futures, the simplest possible solution is to use `flatMap` and `Future.sequence` to chain together functions.
+Since the `RedditAPI` methods return futures, the simplest possible solution is to repeatedly use `flatMap` (via for-comprehension) and `Future.sequence` to produce a single `Future[Seq[Comment]]`.
 
 ```scala
 object SimpleExample {
@@ -48,7 +48,7 @@ object SimpleExample {
     } yield comments
 }
 ```
-This example fetches a list of subreddit names, issues simultaneous requests for the top links of each, then issues a request for comments. Try it for yourself: open up a console and type `main.SimpleExample.run`. You'll see a burst of requests which quickly start to fail with 503: service unavailable errors as Reddit's servers start to rate limit the connection.
+This example fetches a list of subreddit names, issues simultaneous requests for the top links of each, then issues requests for comments for each link. Try it for yourself: open up a console and type `main.SimpleExample.run`. You'll see a burst of link listing requests which quickly start to fail as Reddit's servers rate limit your machine.
 
 Streams 101
 -----------
@@ -58,7 +58,7 @@ Streams 101
 - `Flow[In,Out]`: a set of stream processing steps that has one open input and one open output.
 - `Sink[In]`: a set of stream processing steps that has one open input and an attached output. Can be used as a Subscriber.
 
-[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams):
+[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams): stream primitives which represent live streams. These are created when a stream processing description is materialized.
 - `Subscriber[In]`: a component that accepts a sequenced stream of elements provided by a Publisher.
 - `Publisher[Out]`: a provider of a potentially unbounded number of sequenced elements, publishing them according to the demand received from its Subscriber(s).
 
@@ -66,7 +66,7 @@ Streams 101
 Streams Solution
 ----------------
 
-First, we need a way to throttle a stream, such that it's limited to 1 message per time unit. We'll use the graph DSL to build a partial graph, a graph with a single undefined sink and source which can be used as a stream.
+First, we need a way to throttle a stream down to 1 message per time unit. We'll use the graph DSL to build a partial graph, a graph with a single undefined source and sink which can converted to a flow from source to sink.
 
 ```scala
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
@@ -76,13 +76,14 @@ First, we need a way to throttle a stream, such that it's limited to 1 message p
     val out = UndefinedSink[T]
     PartialFlowGraph{ implicit builder =>
       import FlowGraphImplicits._
-      in ~> zip.left  ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
+      in ~> zip.left
       tickSource ~> zip.right
+      zip.out ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
     }.toFlow(in, out)
   }
 ```
 
-This code constructs the following partial stream-processing graph
+This code constructs the following partial stream-processing graph. Since Zip outputs tuples of T and Unit, it can only emit elements when both `tickSource` and `in` have available elements. Since `tickSource` produces one element per `rate`, this graph can only produce one element per `rate` time units.
 
 ```
 +------------+
@@ -93,11 +94,12 @@ This code constructs the following partial stream-processing graph
 | in +----T---------+
 +----+
 ````
-Finally, the graph is converted to a flow from the vertex `in` to the vertex `out`.
+
+Finally, the graph is converted to a flow from the vertex `in` to the vertex `out` using `toFlow(in, out)`.
 
 
 
-Using throttle, we can now define a `Flow[String, Comment]` which handles all interactions with Reddit's API.
+Using throttle, we can now define a `Flow[String, Comment]` which handles all interactions with Reddit's API.  
 
 ```scala
   val fetchComments: Flow[String, Comment] =
@@ -116,9 +118,9 @@ Using throttle, we can now define a `Flow[String, Comment]` which handles all in
         // 6) Flatten a stream of comment listings into a stream of comments.
         .mapConcat( listing => listing.comments )
 ```
+Note that `mapAsyncUnordered` does not preserve order, which keeps the rare slow request from slowing down the entire stream. If order is important, use `mapAsync` instead.
 
-
-We're also going to need to calculate word counts and write them to some store, batching writes to avoid excessive IO.
+The next step calculates word counts for each comment and writes them to the store, batching writes to avoid excessive IO.
 
 ```scala
  val persistBatch: Flow[Comment, Int] =
@@ -141,7 +143,7 @@ We're also going to need to calculate word counts and write them to some store, 
         }
 ```
 
-So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of String names to which we append the Flow created in the previous steps, yielding a single `Source[Int]` the we can materialize and run.
+So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of String names to which we append the Flow created in the previous steps, yielding a single `Source[Int]` that we can materialize and run.
 
 ```scala
 def main(args: Array[String]): Unit = {
