@@ -99,7 +99,7 @@ Finally, the graph is converted to a flow from the vertex `in` to the vertex `ou
 
 
 
-Using throttle, we can now define a `Flow[String, Comment]` which handles all interactions with Reddit's API.  `mapAsyncUnordered` does not preserve order, which keeps the rare slow request from slowing down the entire stream. If order is important, use `mapAsync` instead.
+Using throttle, we can now define a `Flow[String, Comment]` which handles all interactions with Reddit's API.  
 
 ```scala
   val fetchComments: Flow[String, Comment] =
@@ -118,9 +118,9 @@ Using throttle, we can now define a `Flow[String, Comment]` which handles all in
         // 6) Flatten a stream of comment listings into a stream of comments.
         .mapConcat( listing => listing.comments )
 ```
+Note that `mapAsyncUnordered` does not preserve order, which keeps the rare slow request from slowing down the entire stream. If order is important, use `mapAsync` instead.
 
-
-We're also going to need to calculate word counts and write them to some store, batching writes to avoid excessive IO.
+The next step calculates word counts for each comment and writes them to the store, batching writes to avoid excessive IO.
 
 ```scala
  val persistBatch: Flow[Comment, Int] =
