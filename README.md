@@ -15,16 +15,14 @@ case class CommentListing(subreddit: String, comments: Seq[Comment])
 case class Comment(subreddit: String, body: String)
 
 trait RedditAPI { // handles interaction with reddit's API,
-    def popularLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing]
-    def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing]
-    def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
+  def popularLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing]
+  def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing]
+  def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
 }
 
-trait KVStore { // in-memory key store that supports adding words to pre-subreddit word counts and getting the current word count
-    // update the word count for a subreddit.
-    def addWords(subreddit: String, words: WordCount): Future[Unit]
-    // get word counts for every subreddit
-    def wordCounts: Future[Map[String, WordCount]]
+trait KVStore { // in-memory key-value store
+  def addWords(subreddit: String, words: WordCount): Future[Unit]
+  def wordCounts: Future[Map[String, WordCount]]
 }
 ```
 
@@ -74,7 +72,7 @@ in a short amount of time. First, we'll define a processing pipeline, then we'll
 
 First, we need a way to throttle a stream, such that it's limited to 1 message per time unit. 
 We'll use the graph DSL to build a partial graph, a graph with a single undefined sink and source which can be used as a stream.
-```
+```scala
   /**
     builds the following stream-processing graph.
     +------------+
@@ -84,8 +82,9 @@ We'll use the graph DSL to build a partial graph, a graph with a single undefine
     +----+              +---> +-----+            +-----+      +-----+
     | in +----T---------+
     +----+
-    tickSource emits one element per `rate` time units and zip only emits when an element is present from its left and right
-    input stream, so the resulting stream can never emit more than 1 element per `rate` time units.
+    tickSource emits one element per `rate` time units 
+    zip only emits when an element is present on both its left and right input stream
+    the resulting stream, then, never emits more than 1 element per `rate` time units.
    */
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
     val tickSource = TickSource(rate, rate, () => () )
