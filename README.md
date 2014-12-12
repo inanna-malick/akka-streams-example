@@ -73,16 +73,6 @@ in a short amount of time. First, we'll define a processing pipeline, then we'll
 First, we need a way to throttle a stream, such that it's limited to 1 message per time unit. 
 We'll use the graph DSL to build a partial graph, a graph with a single undefined sink and source which can be used as a stream.
 
-builds the following stream-processing graph:
-```
-+------------+
-| tickSource +-Unit-+
-+------------+      +---> +-----+            +-----+      +-----+
-                      | zip +-(T,Unit)-> | map +--T-> | out |
-+----+              +---> +-----+            +-----+      +-----+
-| in +----T---------+
-+----+
-````
 ```scala
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
     val tickSource = TickSource(rate, rate, () => () )
@@ -97,7 +87,20 @@ builds the following stream-processing graph:
   }
 ```
 
+this code constructs a stream-processing graph with the following structure, then converts it to a flow from `in` to `out`.
+```
++------------+
+| tickSource +-Unit-+
++------------+      +---> +-----+            +-----+      +-----+
+                          | zip +-(T,Unit)-> | map +--T-> | out |
++----+              +---> +-----+            +-----+      +-----+
+| in +----T---------+
++----+
+````
+
+
 Using throttle, we then define a Flow[String, Comment] which handles all interactions with Reddit's API.
+
 ```scala
   val fetchComments: Flow[String, Comment] =
     // 0) Create a duct that applies no transformations.
