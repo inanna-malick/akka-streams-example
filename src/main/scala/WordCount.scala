@@ -35,7 +35,7 @@ object WordCount {
    */
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
     val tickSource = TickSource(rate, rate, () => () )
-    val zip = Zip[T, Unit] 
+    val zip = Zip[T, Unit]
     val in = UndefinedSource[T]
     val out = UndefinedSink[T]
     PartialFlowGraph{ implicit builder =>
@@ -74,14 +74,12 @@ def main(args: Array[String]): Unit = {
       else
         Source(args.toVector)
 
-    // 1) Append ducts to the initial flow and materialize it via forEach.
-    //    The resulting future succeeds if stream processing completes
-    //    or fails if an error occurs.
-    val streamDescription =
-      subreddits
-        .via(fetchLinks)
-        .via(fetchComments)
-        .to(wordCountSink)
+    subreddits
+      .via(fetchLinks)
+      .via(fetchComments)
+      .to(wordCountSink)
+      .run
 
+    as.awaitTermination()
   }
 }

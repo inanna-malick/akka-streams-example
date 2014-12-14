@@ -87,7 +87,7 @@ class WordCountSubscriber extends ActorSubscriber {
         val fname = s"res/$key.tsv"
         println(s"write wordcount for $key to $fname")
         writeTsv(fname, wordcount)
-        println(s"${wordcount.size} discrete words and ${wordcount.values.sum} total words for $key")
+        println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
       }
   }
 }
