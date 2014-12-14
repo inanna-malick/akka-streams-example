@@ -4,12 +4,16 @@ import scala.concurrent.duration._
 import scala.concurrent._
 import scala.util.{Success, Failure}
 import scala.collection.immutable._
-import akka.agent.Agent
+import akka.stream._
+import akka.stream._
+import akka.actor._
+import akka.stream.actor._
 import scalaz._
 import Scalaz._
 import Util._
 import java.io.File
 import java.nio.file.{Paths, Files}
+import org.reactivestreams.Subscriber
 import java.nio.charset.StandardCharsets
 
 
@@ -51,22 +55,39 @@ object Util {
 }
 
 
-class KVStore(implicit val ec: ExecutionContext) {
-  private val commentCount: Store[Map[String,WordCount]] = new Store
-
-  def addWords(subreddit: String, words: WordCount): Future[Unit] = {
-    commentCount.update(Map(subreddit -> words))
-  }
-
-  def wordCounts: Future[Map[String, WordCount]] = commentCount.read
+object WordCountSubscriber {
+ def apply()(implicit sys: ActorSystem): Subscriber[(String, WordCount)] = 
+    ActorSubscriber[(String, WordCount)](sys.actorOf(Props[WordCountSubscriber ]))
 }
 
-class Store[T](implicit val m: Monoid[T], implicit val ec: ExecutionContext) {
-  private val store: Agent[T] = Agent(m.zero)
 
-  def update(in: T): Future[Unit] =
-    store.alter(m.append(_, in)).map( _ => () )
+class WordCountSubscriber extends ActorSubscriber {
+  import ActorSubscriberMessage._
+  import scalaz._
+  import Scalaz._
 
-  def read: Future[T] =
-    store.future()
+  val requestStrategy = WatermarkRequestStrategy(100)
+
+  val wordcounts: Map[String,WordCount] = Map.empty
+
+  def receive = {
+    case OnNext((key: String, words: WordCount)) =>
+      wordcounts |+| Map(key -> words)
+    case OnComplete =>
+      writeResults()
+      context.system.shutdown()
+    case OnError(err: Throwable) =>
+      println(s"finished with error: $err")
+      context.system.shutdown()
+  }
+
+  def writeResults() = {
+      clearOutputDir()
+      wordcounts.foreach{ case (key, wordcount) =>
+        val fname = s"res/$key.tsv"
+        println(s"write wordcount for $key to $fname")
+        writeTsv(fname, wordcount)
+        println(s"${wordcount.size} discrete words and ${wordcount.values.sum} total words for $key")
+      }
+  }
 }
