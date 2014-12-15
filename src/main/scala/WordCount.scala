@@ -37,13 +37,13 @@ object WordCount {
     val tickSource = TickSource(rate, rate, () => () )
     val zip = Zip[T, Unit]
     val in = UndefinedSource[T]
-    val out = UndefinedSink[T]
+    val out = UndefinedSink[(T, Unit)]
     PartialFlowGraph{ implicit builder =>
       import FlowGraphImplicits._
       in ~> zip.left
       tickSource ~> zip.right
-      zip.out ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
-    }.toFlow(in, out)
+      zip.out ~> out
+    }.toFlow(in, out).map{ case (t, _) => t }
   }
 
   val fetchLinks: Flow[String, Link] =
