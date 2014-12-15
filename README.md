@@ -21,11 +21,6 @@ trait RedditAPI { // handles interaction with reddit's API,
   def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing]
   def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
 }
-
-trait KVStore { // in-memory key-value store
-  def addWords(subreddit: String, words: WordCount): Future[Unit]
-  def wordCounts: Future[Map[String, WordCount]]
-}
 ```
 
 Naive Solution:
