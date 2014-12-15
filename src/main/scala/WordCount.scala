@@ -60,7 +60,7 @@ object WordCount {
         .mapConcat( listing => listing.comments )
 
 
-  val wordCountSink: Sink[Comment] =
+  def wordCountSink: Sink[Comment] =
     Flow[Comment]
         .map{ c => (c.subreddit, c.toWordCount)}
         .to(Sink(WordCountSubscriber()))
