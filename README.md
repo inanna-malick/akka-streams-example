@@ -1,7 +1,9 @@
 Scraping Reddit with Akka Streams 1.0
 =====================================
 
+![Alt text](img/mugatu_streams.jpg "Optional Title")
 Streams are so hot right now
+
 
 - Streaming video is replacing legacy media.
       + netflix alone has been measured using 35% US downstream internet bandwidth at peak
