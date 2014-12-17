@@ -14,12 +14,12 @@ Streams are so hot right now
 
 Reactive Streams is a new stream processing standard with both a downstream data channel and an upstream demand channel. 
 
-<img src="img/stream.jpg" alt="alt text" height="100">
+<img src="img/stream.png" alt="alt text" height="100">
 
 Upstream components push data based on downstream demand: when demand exists they push data downstream as it becomes available. If the demand is exhausted, the upstream component will only push data as a response to the downstream informing it that there is more demand. This backpressure can propagate upstream as buffers fill and components stop signalling demanding new data. The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data). In other words, reactive streams components switch between pull and push dynamics depending on demand.
 
 Streams can be merged
-<img src="img/merge.jpg" alt="alt text" height="100">
+<img src="img/merge.png" alt="alt text" height="100">
 
 and split
 <img src="img/split.png" alt="alt text" height="100">
