@@ -1,5 +1,6 @@
 Scraping Reddit with Akka Streams 1.0
 =====================================
+
 <img src="img/mugatu_streams.jpg" alt="alt text" width="150">
 Streams are so hot right now
 
@@ -11,6 +12,9 @@ Streams are so hot right now
 - Internet of Things: streams of data produced by networked devices and sensors
 - The Web: Streams of packets via TCP or UDP
 
+
+Reactive Streams
+----------------
 
 - Reactive Streams is a new stream processing standard that uses a downstream channel to transfer data and an upstream channel to signal demand.
 - Reactive Streams components switch between push and pull dynamically.
@@ -32,9 +36,7 @@ Streams can be split, which merges the downstream demand.
 <img src="img/split.png" alt="alt text" height="200">
 
 
-- RS is defined by a minimal, heavily tested spec.
-
-Here's the entire interface specification. (The behavior specification and tests are much longer)
+RS is defined by the following minimal, heavily tested, set of interfaces.
 ```
 trait Publisher[T] {
   def subscribe(s: Subscriber[T]): Unit
@@ -74,7 +76,6 @@ trait RedditAPI {
   def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
 }
 ```
-
 - Sources[Out]: produces elements of type Out:
 - Sources can be created from the elements stored in a Vector.
 ```
@@ -84,7 +85,8 @@ val subreddits: Source[String] = Source(args.toVector)
 - example from Future, with subsequent map concat step
 - Sources can also be created from Futures, resulting in a Source that emits the result of the future or fails with an error if the future fails.
 - Since popularSubreddits returns a Seq[String], we take the additional step of using the mapConcat utility function to flatten the Source[Seq[T]] into a Source[T]
-  + mapConcat applies a function returning Seq[A] to a Source[B], returning a Source[A].
+  + mapConcat 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'
+  + since the popularSubreddits already produces a sequence, we just use the identity function.
 
 ```
 val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
@@ -104,11 +106,11 @@ val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
 ```
 
 Flows[In, Out]
-- start by creating a Flow[String, String] that applies no transformations
-- using via to concat a throttle flow which limits processing speed 
-    + we'll show how throttle works later. For now, just think of it as a flow that applies no transformation but refuses to produce more than 1 element per rate
-- using mapconcat again
-- using mapAsyncUnordered
+- start by creating a Flow[String, String], a pipeline that applies no transformations
+- using via to connect it to a throttle Flow that also applies no transformation but limits throughput to one message per $redditAPIRate time units.
+    + we'll show how throttle works later. For now, just think of it as a black box with a defined input and output type.
+- using mapAsyncUnordered to issue API calls based on subreddit names emited by the throttle and emit the results of those calls as soon as they are ready. This breaks ordering, but keeps a single long-running call from blocking stream processing.
+- use mapconcat again to flatten the resulting stream of LinkListings into a stream of Links
 
 ```
   val fetchLinks: Flow[String, Link] =
@@ -171,7 +173,9 @@ res.onComplete{
 ```
 
 
-in conclusion
+Conclusion
+----------
+
 - damn, that was easy
 - look at all those vals: wordCount, fetchLinks, fetchComments
 - can be reused, thread safe, stored on objects instead of created for each stream
