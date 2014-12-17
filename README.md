@@ -1,6 +1,6 @@
 Scraping Reddit with Akka Streams 1.0
 =====================================
-<img src="img/mugatu_streams.jpg" alt="alt text" height="48" width="48">
+<img src="img/mugatu_streams.jpg" alt="alt text" width="150">
 Streams are so hot right now
 
 
@@ -14,14 +14,15 @@ Streams are so hot right now
 
 Reactive Streams is a new stream processing standard with both a downstream data channel and an upstream demand channel. 
 
-![Alt text](img/stream.png|width=150x "Optional Title")
+<img src="img/stream.jpg" alt="alt text" height="100">
 
 Upstream components push data based on downstream demand: when demand exists they push data downstream as it becomes available. If the demand is exhausted, the upstream component will only push data as a response to the downstream informing it that there is more demand. This backpressure can propagate upstream as buffers fill and components stop signalling demanding new data. The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data). In other words, reactive streams components switch between pull and push dynamics depending on demand.
 
 Streams can be merged
-![Alt text](img/merge.png|width=150x "Optional Title")
+<img src="img/merge.jpg" alt="alt text" height="100">
+
 and split
-![Alt text](img/split.png|width=150x "Optional Title")
+<img src="img/split.png" alt="alt text" height="100">
 
 , which has the opposite effect on backpressure:
 show pictures
