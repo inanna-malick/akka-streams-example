@@ -1,6 +1,6 @@
 Scraping Reddit with Akka Streams 1.0
 =====================================
-<img src="img/mugatu_streams.jpg" alt="alt text" style="width:50px">
+<img src="img/mugatu_streams.jpg" alt="alt text" height="48" width="48">
 Streams are so hot right now
 
 
