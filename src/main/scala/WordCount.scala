@@ -73,7 +73,7 @@ def main(args: Array[String]): Unit = {
         Source(RedditAPI.popularSubreddits).mapConcat(identity)
       else
         Source(args.toVector)
-
+  
     val res: Future[Map[String, WordCount]] =
       subreddits
       .via(fetchLinks)
