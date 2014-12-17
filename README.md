@@ -6,14 +6,25 @@ Streams are so hot right now
 
 
 - Streaming video is replacing legacy media.
-      + netflix alone has been measured using 35% US downstream internet bandwidth at peak
+    + netflix alone has been measured using 35% US downstream internet bandwidth at peak
 - Real time data processing: streams of stock prices, analytics data, log events
-- Big data: processing large data sets can usually be reduced to some combination of map and reduce steps, both of which are naturally implemented using streams
-- The Internet: TCP and UDP are both standards for sending streams of packets with different deliverability guarantees
+- Big Data: processing large data sets can usually be reduced to some combination of map and reduce steps, both of which are naturally implemented using streams
+- Internet of Things: streams of data produced by networked devices and sensors
+- The Web: Streams of packets via TCP or UDP
 
-Reactive Streams is a new stream processing standard that explicitly models backpressure by using both a downstream data channel and an upstream demand channel. Upstream components push data based on downstream demand: when demand exists they push data downstream as it becomes available. If the demand is exhausted, the upstream component will only push data as a response to the downstream informing it that there is more demand. This backpressure can propagate upstream as buffers fill and components stop signalling demanding new data. The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data). In other words, reactive streams components switch between pull and push dynamics depending on demand.
 
-Streams can be merged and split, which has the opposite effect on backpressure: 
+Reactive Streams is a new stream processing standard with both a downstream data channel and an upstream demand channel. 
+
+![Alt text](img/stream "Optional Title")
+
+Upstream components push data based on downstream demand: when demand exists they push data downstream as it becomes available. If the demand is exhausted, the upstream component will only push data as a response to the downstream informing it that there is more demand. This backpressure can propagate upstream as buffers fill and components stop signalling demanding new data. The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data). In other words, reactive streams components switch between pull and push dynamics depending on demand.
+
+Streams can be merged
+![Alt text](img/merge "Optional Title")
+and split
+![Alt text](img/split "Optional Title")
+
+, which has the opposite effect on backpressure:
 show pictures
 introduces the idea that streams can be graphs
 RS is based on a few heavily tested simple interfaces: (double check)
