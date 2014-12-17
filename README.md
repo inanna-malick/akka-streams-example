@@ -12,25 +12,28 @@ Streams are so hot right now
 - The Web: Streams of packets via TCP or UDP
 
 
-Reactive Streams is a new stream processing standard with both a downstream data channel and an upstream demand channel. 
+- Reactive Streams is a new stream processing standard that uses a downstream channel to transfer data and an upstream channel to signal demand.
+- In other words, reactive streams components switch between push and pull dynamically.
+<img src="img/stream.png" alt="alt text" height="200">
 
-<img src="img/stream.png" alt="alt text" height="100">
+- Upstream components only push data when the downstream signals demand. Demand is tracked as an integer and not a boolean, so the upstream is free to fulfill demand by sending individual elements or batches of a thousand.
+- As a result of this, Reactive Streams switch between push and pull based on conditions.
+- If demand exists the upstream pushes data downstream as soon as it becomes available.
+- If the demand is exhausted, the upstream component only pushes data as a response to the downstream signalling demand. 
+- If the downstream is overloaded, lack of demand propagates upstream as buffers fill and components stop demanding new data. 
+- The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data). 
 
-Upstream components push data based on downstream demand: when demand exists they push data downstream as it becomes available. If the demand is exhausted, the upstream component will only push data as a response to the downstream informing it that there is more demand. This backpressure can propagate upstream as buffers fill and components stop signalling demanding new data. The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data). In other words, reactive streams components switch between pull and push dynamics depending on demand.
+Streams can be merged, which splits the upstream demand
+<img src="img/merge.png" alt="alt text" height="200">
 
-Streams can be merged
-<img src="img/merge.png" alt="alt text" height="100">
+Streams can also be split, which merges the downstream demand.
+<img src="img/split.png" alt="alt text" height="200">
 
-and split
-<img src="img/split.png" alt="alt text" height="100">
 
-, which has the opposite effect on backpressure:
-show pictures
-introduces the idea that streams can be graphs
-RS is based on a few heavily tested simple interfaces: (double check)
+RS is based on a few heavily tested simple interfaces:
+rigorous specification of semantics, heavily tested, simple enough complete freedom for APIs, different impls can interop seamlessly via these interfaces
 
 Here's the entire interface specification. (The behavior specification and tests are much longer)
-
 ```
 trait Publisher[T] {
   def subscribe(s: Subscriber[T]): Unit
@@ -49,7 +52,6 @@ trait Subscription {
 }
 ```
 
-rigorous specification of semantics, heavily tested, simple enough complete freedom for APIs, different impls can interop seamlessly via these interfaces
 
 Akka Streams DSL:
 --------------------------
