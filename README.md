@@ -1,7 +1,7 @@
 Scraping Reddit with Akka Streams 1.0
 =====================================
 
-Streams are so hot right now 
+Streams are so hot right now
 
 - Streaming video is replacing legacy media.
       + netflix alone has been measured using 35% US downstream internet bandwidth at peak
@@ -37,11 +37,6 @@ trait Subscription {
 ```
 
 rigorous specification of semantics, heavily tested, simple enough complete freedom for APIs, different impls can interop seamlessly via these interfaces
-actor example
-
-```
-...etc
-```
 
 Akka Streams DSL:
 --------------------------
@@ -115,9 +110,23 @@ val fetchComments: Flow[Link, Comment] =
 
 
 Sometimes a linear stream isn't sufficient, in those cases stream graphs can be constructed.
-graphbuilder for connecting stream processing vertices
-throttle step as used above. image first
-then code
+ - using graphbuilder for connecting stream processing vertices. Graphs can be complete or partial, with partial graphs having undefined sources or sinks. Partial graphs can be converted into sinks, sources or flows.
+ - throttle step as used above. image first
+
+```
+def throttle[T](rate: FiniteDuration): Flow[T, T] = {
+  val tickSource = TickSource(rate, rate, () => () )
+  val zip = Zip[T, Unit]
+  val in = UndefinedSource[T]
+  val out = UndefinedSink[(T, Unit)]
+  PartialFlowGraph{ implicit builder =>
+    import FlowGraphImplicits._
+    in ~> zip.left
+    tickSource ~> zip.right
+    zip.out ~> out
+  }.toFlow(in, out).map{ case (t, _) => t }
+}
+```
 
 
 Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith()

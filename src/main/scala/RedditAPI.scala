@@ -38,7 +38,7 @@ object RedditAPI {
           .map(_.\("data").\("url"))
           .collect{ case JString(url) => url.substring(3, url.length - 1) }
           .map{ x => println(x); x}
-      }
+        }
     }
 }
 
