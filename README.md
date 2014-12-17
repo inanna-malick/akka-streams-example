@@ -46,117 +46,102 @@ actor example
 Akka Streams DSL:
 --------------------------
 
-Akka streams also includes a high-level, type safe DSL for working with streams. Some  examples,
-
+- However, those interfaces are too low level to code against.
+- Akka streams also includes a high-level, type safe DSL for working with streams.
+- dsl makes this easy, fun, typesafe to work with. Let me demonstrate w/ reddit example.
+- We'll be working with this API:
 ```
-val source: Source[A]
-def isInteresting(a: A): Boolean
-def extractFeatures(a: A): Seq[B]
-pipeline: Flow[B, C]
-sink: Sink[C]
-```
-
-The ease of combining them together:
-
-```
-source.filter(isInteresting).mapConcat(extractFeatures).via(pipeline).to(sink)
-```
-
-Sources, Flows and Sinks make it easy to construct and string together linear processing steps, graph builders are used to construct more complicated processing graphs. These graphs can either be complete graphs runnable by themselves or partial graphs with undefined sources, sinks or both that can be converted to Sources, Sinks or Flows. `~>` is used to connect vertices in a type safe manner:
-
-```
-  def throttle[T](rate: FiniteDuration): Flow[T, T] = {
-    val tickSource = TickSource(rate, rate, () => () )
-    val zip = Zip[T, Unit]
-    val in = UndefinedSource[T]
-    val out = UndefinedSink[(T, Unit)]
-    PartialFlowGraph{ implicit builder =>
-      import FlowGraphImplicits._
-      in ~> zip.left
-      tickSource ~> zip.right
-      zip.out ~> out
-    }.toFlow(in, out).map{ case (t, _) => t }
-  }
-```
-
-maybe show image
-
-
-mention demand from akka community?
-- people wanted type-safe streaming through actors with bounded buffering
-- flow control is non-trivial, mailboxes blow up if demand spikes
-
-Example:
-------------
--
-to make this example concrete, let's build something: give types/reddit api spec,
-
-````
 type WordCount = Map[String, Int]
 case class LinkListing(links: Seq[Link])
 case class Link(id: String, subreddit: String)
 case class CommentListing(subreddit: String, comments: Seq[Comment])
 case class Comment(subreddit: String, body: String)
 
-trait RedditAPI { // handles interaction with reddit's API,
+trait RedditAPI {
   def popularLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing]
   def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing]
   def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
 }
 ```
-We'll use the throttle defined earlier to restrict the flows that make API calls to 1 request per 500ms to avoid rate limiting.
+
+Sources[Out]: produces elements of type Out:
+- example from Vector
+```
+val subreddits: Source[String] = Source(args.toVector)
+```
+
+example from future, with subsequent map concat step
+describe mapconcat
+```
+val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
+```
 
 
-transform a stream of subreddit names into a stream of the most popular links in posted to subreddits
-  ```
+Sinks[In]: consumes elements of type In:
+some sinks produce values on completion, such as ForeachSink => Future[Unit] or FoldSink => Future[T]
+
+```
+val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
+  FoldSink(Map.empty[String, WordCount])( 
+    (acc: Map[String, WordCount], c: Comment) => 
+      mergeWordCounts(acc, Map(c.subreddit -> c.toWordCount))
+  )
+```
+
+Flows[In, Out]
+- subreddit name -> popular links
+- using mapconcat again
+- using mapAsyncUnordered
+- using via to concat a throttle flow which limits processing speed
+
+```
   val fetchLinks: Flow[String, Link] =
     Flow[String]
-        .via(throttle(redditAPIRate))
-        .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) )
-        .mapConcat( listing => listing.links )
+    .via(throttle(redditAPIRate))
+    .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) )
+    .mapConcat( listing => listing.links )
 ```
 
-transform a stream of links into a stream of the most popular comments on those links
-```
-comments in those threads
-  val fetchComments: Flow[Link, Comment] =
-    Flow[Link]
-        .via(throttle(redditAPIRate))
-        .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
-        .mapConcat( listing => listing.comments )
-```
-
-
-convert incoming comments into word counts and save them in an in-memory store
-```
-sink
-  def wordCountSink: Sink[Comment] =
-    Flow[Comment]
-        .map{ c => (c.subreddit, c.toWordCount)}
-        .to(Sink(WordCountSubscriber()))
-```
-
-subreddits: Source[String] stream of subreddit names from 
-from input Vector
-from API call then concat
+the flow that turns links into comments follows the same pattern
 
 ```
-val subreddits: Source[String] =
-  Source(RedditAPI.popularSubreddits)
-    .mapConcat(identity)
+val fetchComments: Flow[Link, Comment] =
+  Flow[Link]
+    .via(throttle(redditAPIRate))
+    .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
+    .mapConcat( listing => listing.comments )
 ```
 
 
-```    
-    subreddits
-      .via(fetchLinks)
-      .via(fetchComments)
-      .to(wordCountSink)
-      .run
+
+Sometimes a linear stream isn't sufficient, in those cases stream graphs can be constructed.
+graphbuilder for connecting stream processing vertices
+throttle step as used above. image first
+then code
+
+
+Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith()
+
+```
+val res: Future[Map[String, WordCount]] =
+  subreddits
+    .via(fetchLinks)
+    .via(fetchComments)
+    .runWith(wordCountSink)
+
+res.onComplete{
+  case Success(wordcounts) =>
+    writeResults(wordcounts)
+    as.shutdown()
+  case Failure(f) =>
+    println(s"failed with $f")
+    as.shutdown()
+  }
 ```
 
-a few words on how it easy it was to define the stream processing components and connect them. Also all typesafe.
 
-Conclusion
----------------
-todo.
+in conclusion
+- damn, that was easy
+- look at all those vals: wordCount, fetchLinks, fetchComments
+- can be reused, thread safe, stored on objects instead of created for each stream
+- great for more complex problems, by a team w/ history of implementing great stuff (Akka, Typesafe)
