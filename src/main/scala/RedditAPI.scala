@@ -11,8 +11,8 @@ import Util._
 
 object RedditAPI {
 
-  val linksToFetch = 50
-  val subredditsToFetch = 50
+  val linksToFetch = 15
+  val subredditsToFetch = 5
   val commentsToFetch = 2000
   val commentDepth = 25
 

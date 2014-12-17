@@ -59,11 +59,11 @@ object WordCount {
         .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
         .mapConcat( listing => listing.comments )
 
-
-  def wordCountSink: Sink[Comment] =
-    Flow[Comment]
-        .map{ c => (c.subreddit, c.toWordCount)}
-        .to(Sink(WordCountSubscriber()))
+  val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
+    FoldSink(Map.empty[String, WordCount])( 
+      (acc: Map[String, WordCount], c: Comment) => 
+        mergeWordCounts(acc, Map(c.subreddit -> c.toWordCount))
+    )
 
 def main(args: Array[String]): Unit = {
     // 0) Create a Flow of String names, using either
@@ -74,11 +74,20 @@ def main(args: Array[String]): Unit = {
       else
         Source(args.toVector)
 
-    subreddits
+    val res: Future[Map[String, WordCount]] =
+      subreddits
       .via(fetchLinks)
       .via(fetchComments)
-      .to(wordCountSink)
-      .run
+      .runWith(wordCountSink)
+
+    res.onComplete{
+      case Success(wordcounts) =>
+        writeResults(wordcounts)
+        as.shutdown()
+      case Failure(f) =>
+        println(s"failed with $f")
+        as.shutdown()
+    }
 
     as.awaitTermination()
   }

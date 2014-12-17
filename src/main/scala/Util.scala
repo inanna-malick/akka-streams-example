@@ -45,49 +45,23 @@ object Util {
     Files.write(Paths.get(fname), tsv.getBytes(StandardCharsets.UTF_8))
   }
 
-  def clearOutputDir() = 
+  def clearOutputDir() =
     for {
       files <- Option(new File("res").listFiles)
       file <- files if file.getName.endsWith(".tsv")
     } file.delete()
 
   type WordCount = Map[String, Int]
-}
 
+  def mergeWordCounts(a: Map[String, WordCount], b: Map[String, WordCount]) = a |+| b
 
-object WordCountSubscriber {
- def apply()(implicit sys: ActorSystem): Subscriber[(String, WordCount)] = 
-    ActorSubscriber[(String, WordCount)](sys.actorOf(Props[WordCountSubscriber ]))
-}
-
-
-class WordCountSubscriber extends ActorSubscriber {
-  import ActorSubscriberMessage._
-  import scalaz._
-  import Scalaz._
-
-  val requestStrategy = WatermarkRequestStrategy(100)
-
-  val wordcounts: Map[String,WordCount] = Map.empty
-
-  def receive = {
-    case OnNext((key: String, words: WordCount)) =>
-      wordcounts |+| Map(key -> words)
-    case OnComplete =>
-      writeResults()
-      context.system.shutdown()
-    case OnError(err: Throwable) =>
-      println(s"finished with error: $err")
-      context.system.shutdown()
-  }
-
-  def writeResults() = {
-      clearOutputDir()
-      wordcounts.foreach{ case (key, wordcount) =>
-        val fname = s"res/$key.tsv"
-        println(s"write wordcount for $key to $fname")
-        writeTsv(fname, wordcount)
-        println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
-      }
+  def writeResults(wordcounts: Map[String, WordCount]) = {
+    clearOutputDir()
+    wordcounts.foreach{ case (key, wordcount) =>
+      val fname = s"res/$key.tsv"
+      println(s"write wordcount for $key to $fname")
+      writeTsv(fname, wordcount)
+      println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
+    }
   }
 }
