@@ -2,14 +2,12 @@ Scraping Reddit with Akka Streams 1.0
 =====================================
 
 <img src="img/mugatu_streams.jpg" alt="alt text" width="150">
-Streams are so hot right now
+Streams are so hot right now: here are a few examples of how stream processing is used today:
 
-
-- Streaming video is replacing legacy media.
-    + netflix alone has been measured using 35% US downstream internet bandwidth at peak
-- Real time data processing: streams of stock prices, analytics data, log events
-- Big Data: processing large data sets can usually be reduced to some combination of map and reduce steps, both of which are naturally implemented using streams
-- Internet of Things: streams of data produced by networked devices and sensors
+- Streaming video is replacing legacy media: Netflix alone has been measured using up to 35% US downstream internet bandwidth.
+- Real time data processing: streams of stock prices, analytics data, log events, streams of data from networked sensors.
+- Big Data: processing large data sets can usually be reduced to some combination of map and reduce steps, both of which are naturally implemented using streams.
+    + This isn't just a hypothetical: Twitter's Summingbird library can be used to build descriptions of stream processing logic that are then used to create either real-time data processing steps using Storm or batch-processing jobs using Hadoop.
 - The Web: Streams of packets via TCP or UDP
 
 
@@ -20,18 +18,19 @@ Reactive Streams
 - Reactive Streams components switch between push and pull dynamically.
 <img src="img/stream.png" alt="alt text" height="200">
 
-- Upstream components only push data when the downstream signals demand. Demand is tracked as an integer and not a boolean, so the upstream is free to fulfill demand by sending individual elements or batches of a thousand.
-- As a result of this, Reactive Streams switch between push and pull based on conditions.
+- Upstream components only push data when the downstream signals demand.
+- The upstream is free to fulfill demand by sending individual elements or batches of a thousand.
 - If demand exists the upstream pushes data downstream as soon as it becomes available.
 - If the demand is exhausted, the upstream component only pushes data as a response to the downstream signalling demand.
 - If the downstream is overloaded, lack of demand propagates upstream as buffers fill and components stop demanding new data.
 - The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data).
 
-Streams can be merged, which splits the upstream demand
+
+Merging streams splits the upstream demand
 
 <img src="img/merge.png" alt="alt text" height="200">
 
-Streams can be split, which merges the downstream demand.
+Splitting streams merges the downstream demand.
 
 <img src="img/split.png" alt="alt text" height="200">
 
@@ -61,8 +60,10 @@ Akka Streams DSL:
 
 - However, those interfaces are too low level to code against.
 - Akka streams also includes a high-level, type safe DSL for working with streams.
+- This DSL is used to create descriptions of stream processing graphs, which are then materialized into running reactive streams.
 - Domain Specific Language makes this easy, fun, typesafe to work with. Let me demonstrate w/ reddit example.
 - We'll be working with this API:
+
 ```
 type WordCount = Map[String, Int]
 case class LinkListing(links: Seq[Link])
@@ -76,41 +77,52 @@ trait RedditAPI {
   def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
 }
 ```
-- Sources[Out]: produces elements of type Out:
-- Sources can be created from the elements stored in a Vector.
+
+Sources
+-------
+
+An instance of the type Source[Out] produces a potentially unbounded stream of elements of type Out. We'll start by creating a stream of subreddit names, represented as Strings.
+
+Sources can be created from the elements stored in a Vector.
 ```
 val subreddits: Source[String] = Source(args.toVector)
 ```
 
-- example from Future, with subsequent map concat step
-- Sources can also be created from Futures, resulting in a Source that emits the result of the future or fails with an error if the future fails.
-- Since popularSubreddits returns a Seq[String], we take the additional step of using the mapConcat utility function to flatten the Source[Seq[T]] into a Source[T]
-  + mapConcat 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'
-  + since the popularSubreddits already produces a sequence, we just use the identity function.
+Single-element sources can also be created using the results of a Future, resulting in a Source that either emits the result of the future if it is successful or fails with an error if the future fails.
 
 ```
 val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
 ```
 
+Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just use the identity function.
 
-Sinks[In]: consumes elements of type In:
-- some sinks produce values on completion, such as ForeachSink => Future[Unit] or FoldSink => Future[T]
-- This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a Map[String, WordCount] that is produced on stream completion
+Sinks
+-----
+
+A Sink[In] consumes elements of type In.Some sinks produce values on completion. For example, ForeachSinks produce a Future[Unit] that completes when the stream completes. FoldSinks, which fold some number of elements A into a zero value B using a function (A, B) => B produce a Future[B] that completes when the stream completes.
+
+This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a Map[String, WordCount] that can be retrieved on stream completion
 
 ```
 val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
-  FoldSink(Map.empty[String, WordCount])( 
-    (acc: Map[String, WordCount], c: Comment) => 
+  FoldSink(Map.empty[String, WordCount])(
+    (acc: Map[String, WordCount], c: Comment) =>
       mergeWordCounts(acc, Map(c.subreddit -> c.toWordCount))
   )
 ```
 
-Flows[In, Out]
-- start by creating a Flow[String, String], a pipeline that applies no transformations
-- using via to connect it to a throttle Flow that also applies no transformation but limits throughput to one message per $redditAPIRate time units.
-    + we'll show how throttle works later. For now, just think of it as a black box with a defined input and output type.
-- using mapAsyncUnordered to issue API calls based on subreddit names emited by the throttle and emit the results of those calls as soon as they are ready. This breaks ordering, but keeps a single long-running call from blocking stream processing.
-- use mapconcat again to flatten the resulting stream of LinkListings into a stream of Links
+Flows
+-----
+
+A Flow[In, Out] consumes elements of type In, applies some sequence of transformations, and emits elements of type Out.
+
+This Flow takes subreddit names and emits popular links for each supplied subreddit name.
+- We start by creating a Flow[String, String], a pipeline that applies no transformations.
+- We use via to append a throttle Flow.
+    + We'll define throttle in the next section. For now, just think of it as a black box Flow[T, T] that limits throughput to one message per redditAPIRate time units.
+- Next we use mapAsyncUnordered to fetch popular links for each subreddit name emitted by the throttle.
+    + mapAsyncUnordered is used here because we don't care about preserving ordering. It emits elements as soon as their Future completes, which keeps the occasional long-running call from blocking the entire stream.
+- Finally, we use mapConcat to flatten the resulting stream of LinkListings into a stream of Links.
 
 ```
   val fetchLinks: Flow[String, Link] =
@@ -120,8 +132,7 @@ Flows[In, Out]
     .mapConcat( listing => listing.links )
 ```
 
-The flow that converts a stream of links into a stream of comments is similar.
-
+This flow uses the same sequence of steps (with a different API call) to convert a stream of links into a stream of the most popular comments on those links.
 ```
 val fetchComments: Flow[Link, Comment] =
   Flow[Link]
@@ -130,7 +141,8 @@ val fetchComments: Flow[Link, Comment] =
     .mapConcat( listing => listing.comments )
 ```
 
-
+Graphs
+------
 
 Sometimes a linear pipeline isn't enough, in those cases stream graphs can be constructed where nodes have multiple inputs or outputs.
     - using graphbuilder for connecting stream processing vertices. Graphs can be complete or partial, with partial graphs having undefined sources or sinks.
@@ -177,6 +189,6 @@ Conclusion
 ----------
 
 - damn, that was easy
-- look at all those vals: wordCount, fetchLinks, fetchComments
-- can be reused, thread safe, stored on objects instead of created for each stream
+- look at all those vals: wordCount, fetchLinks, fetchComments.
+- Each of them can be reused, thread safe, stored on objects instead of created for each stream
 - great for more complex problems, by a team w/ history of implementing great stuff (Akka, Typesafe)
