@@ -2,6 +2,8 @@ Scraping Reddit with Akka Streams 1.0
 =====================================
 
 <img src="img/mugatu_streams.png" alt="alt text">
+
+
 Streams are so hot right now: here are a few examples of how stream processing is used today:
 
 - Streaming video is replacing legacy media: Netflix alone has been measured using up to 35% US downstream internet bandwidth.
