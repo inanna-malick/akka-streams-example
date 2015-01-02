@@ -16,28 +16,18 @@ Meanwhile, a significant fraction of the other 65% of bandwidth is taken up by s
 
 Reactive Streams
 ----------------
-
-- Reactive Streams is a new stream processing standard that uses a downstream channel to transfer data and an upstream channel to signal demand.
-- Reactive Streams components switch between push and pull dynamically.
 <img src="img/stream.png" alt="alt text" height="200">
 
-- Upstream components only push data when the downstream signals demand.
-- The upstream is free to fulfill demand by sending individual elements or batches of a thousand.
-- If demand exists the upstream pushes data downstream as soon as it becomes available.
-- If the demand is exhausted, the upstream component only pushes data as a response to the downstream signalling demand.
-- If the downstream is overloaded, lack of demand propagates upstream as buffers fill and components stop demanding new data.
-- The source can then choose between slowing down (streaming a movie) and dropping data (processing real time data).
+The Reactive Streams standard defines an upstream demand channel and a downstream data channel. Publishers do not send data until a request for N elements arrives via the demand channel, at which point they are free to push up to N elements downstream either in batches or individually. When outstanding demand exists, the publisher is free to push data to the subscriber as it becomes available. When demand is exhausted, the publisher cannot send data except as a response to demand signalled from downstream. This lack of demand, or backpressure, propagates upstream in a controlled manner, allowing the source node to choose between starting up more resources, slowing down, or dropping data.
 
 
-Merging streams splits the upstream demand
+What's cool is that since data and demand travel in opposite directions, merging streams splits the upstream demand and splitting streams merges the downstream demand.
 
 <img src="img/merge.png" alt="alt text" height="200">
-
-Splitting streams merges the downstream demand.
-
 <img src="img/split.png" alt="alt text" height="200">
 
-
+The Code
+--------
 RS is defined by the following minimal, heavily tested, set of interfaces.
 ```
 trait Publisher[T] {
