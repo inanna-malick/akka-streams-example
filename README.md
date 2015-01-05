@@ -47,11 +47,11 @@ trait Subscription {
 }
 ```
 
+This is great, but it's all very low level. Look at all those Unit return types! If only there was a domain-specific language for transforming and composing stream processing graphs.
 
 Akka Streams DSL:
 --------------------------
 
-- However, those interfaces are too low level to code against.
 - Akka streams also includes a high-level, type safe DSL for working with streams.
 - This DSL is used to create descriptions of stream processing graphs, which are then materialized into running reactive streams.
 - Domain Specific Language makes this easy, fun, typesafe to work with. Let me demonstrate w/ reddit example.
@@ -181,7 +181,7 @@ res.onComplete{
 Conclusion
 ----------
 
-- damn, that was easy
-- look at all those vals: wordCount, fetchLinks, fetchComments.
-- Each of them can be reused, thread safe, stored on objects instead of created for each stream
-- great for more complex problems, by a team w/ history of implementing great stuff (Akka, Typesafe)
+- Recap: we constructed small pipeline segments like throttle, used them to build larger pipeline segments like fetchLinks and fetchComments, then used these larger segments to create our stream processing graph. 
++ These smaller segments immutable, thread safe, and fully reusable.
++ A larger application might store pipeline segments statically, on some object, to avoid the overhead of repeated initialization.
+- This is a great tool that can (and should) be used for more complex problems, by a team w/ history of implementing great stuff (Akka, Typesafe)
