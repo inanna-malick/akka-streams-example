@@ -4,11 +4,12 @@ Scraping Reddit with Akka Streams 1.0
 <img src="img/mugatu_streams.png" alt="alt text">
 
 
-**Assertion**: A large fraction of today's tech industry can be described as some combination of sending, transforming and consuming streams of data.
-- Streaming audio and video are quickly replacing legacy media delivery systems like Blockbuster: Netflix alone has been measured using 35% percent of the US's downstream internet bandwidth during peak hours. 
-Meanwhile, a significant fraction of the other 65% of bandwidth is taken up by streams of stock prices, analytics data, log events, streams of data from networked sensors.
-  + huge assertion, could do with some sources re significant fraction
-- Big data, the buzzword of our times, largely boils down to sequences of map & reduce steps, which can easily be expressed in terms of stream processing pipelines. Writing jobs as stream processing pipelines adds flexibility. For example, Twitter uses a library called Summingbird to transform high-level stream processing steps into either real-time data processing topologies using Storm or batch-processing jobs using Hadoop.
+**Assertion**: A large fraction of today's tech industry can be described as some combination of sending, transforming and consuming streams of data. A few quick examples:
+- Streaming audio and video are quickly replacing legacy media delivery systems like video rental and broadcast TV.
+  + Netflix alone has been measured using 35% percent of the US's downstream internet bandwidth during peak hours. 
+- A significant fraction of startups and established companies produce, transform or consume streams of market data, analytics data, log events, tweets, or data from networked sensors.
+- Big data, the buzzword of our times, largely boils down to sequences of map & reduce steps, which can easily be expressed as transformations and combinations of streams of data. 
+  + Writing jobs as stream processing pipelines adds flexibility. For example, Twitter uses a library called Summingbird to transform high-level stream processing steps into either real-time data processing topologies using Storm or batch-processing jobs using Hadoop.
 - And speaking of the Internet:
   + TCP itself is just a way of sending ordered streams of packets between hosts
   + UDP is another way to send streams of data, without TCP's ordering or delivery guarantees
