@@ -184,3 +184,6 @@ Conclusion
 
 - We started by defining small pipeline segments like throttle, used them to build larger pipeline segments such as fetchLinks and fetchComments, then used these larger segments to create our stream processing graph. These smaller stream processing segments are immutable, thread safe, and fully reusable. They could easily be stored statically, on some object, to avoid the overhead of repeated initialization.
 - Akka Streams is a great tool that can (and should) be used for more complex problems.
+- Resources:
+  + [Akka Streams Cookbook](http://doc.akka.io/docs/akka-stream-and-http-experimental/1.0-M2/scala/stream-cookbook.html)
+  + [Reactive Streams: Handling Data-Flows the Reactive Way (great talk by Roland Kuhn) )](http://www.infoq.com/presentations/reactive-steams-akka)
