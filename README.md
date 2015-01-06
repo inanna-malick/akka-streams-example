@@ -181,7 +181,5 @@ res.onComplete{
 Conclusion
 ----------
 
-- Recap: we constructed small pipeline segments like throttle, used them to build larger pipeline segments like fetchLinks and fetchComments, then used these larger segments to create our stream processing graph. 
-+ These smaller segments immutable, thread safe, and fully reusable.
-+ A larger application might store pipeline segments statically, on some object, to avoid the overhead of repeated initialization.
-- This is a great tool that can (and should) be used for more complex problems, by a team w/ history of implementing great stuff (Akka, Typesafe)
+- We started by defining small pipeline segments like throttle, used them to build larger pipeline segments such as fetchLinks and fetchComments, then used these larger segments to create our stream processing graph. These smaller stream processing segments are immutable, thread safe, and fully reusable. They could easily be stored statically, on some object, to avoid the overhead of repeated initialization.
+- Akka Streams is a great tool that can (and should) be used for more complex problems.
