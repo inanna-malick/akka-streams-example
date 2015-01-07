@@ -48,7 +48,7 @@ trait Subscription {
 }
 ```
 
-This is great, but it's all very low level. Look at all those Unit return types! If only there was a domain-specific language for transforming and composing stream processing graphs.
+This is great, but it's all very low level. Look at all those Unit return types! Fortunately, there's a domain-specific language for transforming and composing stream processing graphs.
 
 Akka Streams DSL:
 --------------------------
@@ -138,9 +138,10 @@ val fetchComments: Flow[Link, Comment] =
 Graphs
 ------
 
-Sometimes a linear pipeline isn't enough, in those cases stream graphs can be constructed where nodes have multiple inputs or outputs.
-    - using graphbuilder for connecting stream processing vertices. Graphs can be complete or partial, with partial graphs having undefined sources or sinks.
-    - Partial graphs can be converted into sinks, sources or flows.
+
+Not everything can be expressed as a linear sequence of stream processing steps. The Akka Streams DSL provides tools for building stream processing graphs with stream processing nodes that have multiple inputs and outputs. In this case, we want to zip a fast stream together with a slow one, to throttle the throughput of the fast stream to that of the the slow one.
+ - using graphbuilder for connecting stream processing vertices. Graphs can be complete or partial, with partial graphs having undefined sources or sinks.
+ - Partial graphs can be converted into sinks, sources or flows.
  - throttle step as used above. image first
 
 ```
