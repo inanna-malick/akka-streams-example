@@ -50,13 +50,18 @@ trait Subscription {
 
 This is great, but it's all very low level. Look at all those Unit return types! Fortunately, there's a domain-specific language for transforming and composing stream processing graphs.
 
-Akka Streams DSL:
+Akka Streams:
 --------------------------
 
-- Akka streams also includes a high-level, type safe DSL for working with streams.
-- This DSL is used to create descriptions of stream processing graphs, which are then materialized into running reactive streams.
-- Domain Specific Language makes this easy, fun, typesafe to work with. Let me demonstrate w/ reddit example.
-- We'll be working with this API:
+- Akka Streams has two major components: 
++ A high-level, type safe DSL for creating descriptions of stream processing graphs.
++ Machinery for transforming these descriptions into live stream processing graphs backed by Akka actors and implementing the Reactive Streams standard.
+
+
+We're going to use Akka Streams to count the number of times words are used in commments on each of the most popular sub-forums on Reddit. (Recap: Reddit is structured with subreddits at the top level. Users can post links to subreddits and add comments to links. Links and comments can be voted 'up' or 'down' by users.) We're going to use Reddit's API to get a list of popular subreddits, get a list of popular links for each subreddit, and then get popular comments for each link. Finally, we'll persist word counts for the comments of each subreddit.
+
+
+Let's start with an overview of the types we'll be working with. 
 
 ```
 type WordCount = Map[String, Int]
@@ -68,7 +73,7 @@ case class Comment(subreddit: String, body: String)
 trait RedditAPI {
   def popularLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing]
   def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing]
-  def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
+  def popularSubreddits(implicit ec: ExecutionContext): Future[Seq[String]]
 }
 ```
 
