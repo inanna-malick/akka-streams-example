@@ -139,10 +139,9 @@ Graphs
 ------
 
 
-Not everything can be expressed as a linear sequence of stream processing steps. The Akka Streams DSL provides tools for building stream processing graphs with stream processing nodes that have multiple inputs and outputs. In this case, we want to zip a fast stream together with a slow one, to throttle the throughput of the fast stream to that of the the slow one.
- - using graphbuilder for connecting stream processing vertices. Graphs can be complete or partial, with partial graphs having undefined sources or sinks.
- - Partial graphs can be converted into sinks, sources or flows.
- - throttle step as used above. image first
+Not everything can be expressed as a linear sequence of stream processing steps. The Akka Streams DSL provides tools for building stream processing graphs with stream processing nodes that have multiple inputs and outputs. In this case, we want to zip a fast stream together with a slow one, to throttle the throughput of the fast stream to that of the the slow one. 
+ - Graphs can be complete or partial, with partial graphs having undefined sources, sinks or both.
+ - Complete graphs can be run as-is. 
 
 ```
 def throttle[T](rate: FiniteDuration): Flow[T, T] = {
