@@ -4,12 +4,12 @@ Scraping Reddit with Akka Streams 1.0
 <img src="img/mugatu_streams.png" alt="alt text">
 
 
-**Assertion**: A large fraction of today's tech industry can be described as some combination of sending, transforming and consuming streams of data. A few quick examples:
+**Assertion**: A large part of today's tech industry can be described as some combination of sending, transforming and consuming streams of data. A few quick examples:
 - Streaming audio and video are quickly replacing legacy media delivery systems like video rental and broadcast TV.
   + Netflix alone has been measured using 35% percent of the US's downstream internet bandwidth during peak hours. 
 - A significant fraction of startups and established companies produce, transform or consume streams of market data, analytics data, log events, tweets, or data from networked sensors.
 - Big data, the buzzword of our times, largely boils down to sequences of map & reduce steps, which can easily be expressed as transformations and combinations of streams of data. 
-  + Writing jobs as stream processing pipelines adds flexibility. For example, Twitter uses a library called Summingbird to transform high-level stream processing steps into either real-time data processing topologies using Storm or batch-processing jobs using Hadoop.
+  + Writing jobs as stream processing pipelines adds flexibility. For example, Twitter uses a library called Summingbird to transform high-level stream processing steps into either real-time stream processing graphs using Storm or batch-processing jobs using Hadoop.
 - And speaking of the Internet:
   + TCP itself is just a way of sending ordered streams of packets between hosts
   + UDP is another way to send streams of data, without TCP's ordering or delivery guarantees
@@ -77,18 +77,18 @@ Sources
 
 An instance of the type Source[Out] produces a potentially unbounded stream of elements of type Out. We'll start by creating a stream of subreddit names, represented as Strings.
 
-Sources can be created from the elements stored in a Vector.
+Sources can be created from Vectors (an indexed sequence roughly equivalent to an Array).
 ```
 val subreddits: Source[String] = Source(args.toVector)
 ```
 
-Single-element sources can also be created using the results of a Future, resulting in a Source that either emits the result of the future if it is successful or fails with an error if the future fails.
+Single-element sources can also be created from Futures, resulting in a Source that emits the result of the future if it succeeds or fails if the future fails.
 
 ```
 val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
 ```
 
-Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just use the identity function.
+Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just pass the identity function to mapConcat.
 
 Sinks
 -----
