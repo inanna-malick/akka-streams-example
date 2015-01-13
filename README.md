@@ -1,173 +1,194 @@
 Scraping Reddit with Akka Streams 1.0
 =====================================
 
-> Reactive Streams is an initiative to provide a standard for asynchronous stream processing with non-blocking back pressure on the JVM.
-> -[reactive-streams.org](http://www.reactive-streams.org/)
+<img src="img/mugatu_streams.png" alt="alt text">
 
-Akka Streams provide a domain specific language for describing stream processing steps that are then materialized to create reactive streams implemented on top of Akka actors. In this post I explain the process of constructing a tool for scraping Reddit comments and constructing per-subreddit wordcounts using Akka Streams.
 
-API Sketch:
------------
+**Assertion**: A large part of today's tech industry can be described as some combination of sending, transforming and consuming streams of data. A few quick examples:
+- Streaming audio and video are quickly replacing legacy media delivery systems like video rental and broadcast TV.
+  + Netflix alone has been measured using 35% percent of the US's downstream internet bandwidth during peak hours. 
+- A significant fraction of startups and established companies produce, transform or consume streams of market data, analytics data, log events, tweets, or data from networked sensors.
+- Big data, the buzzword of our times, largely boils down to sequences of map & reduce steps, which can easily be expressed as transformations and combinations of streams of data. 
+  + Writing jobs as stream processing pipelines adds flexibility. For example, Twitter uses a library called Summingbird to transform high-level stream processing steps into either real-time stream processing graphs using Storm or batch-processing jobs using Hadoop.
+- And speaking of the Internet:
+  + TCP itself is just a way of sending ordered streams of packets between hosts
+  + UDP is another way to send streams of data, without TCP's ordering or delivery guarantees
 
-```scala
+
+Reactive Streams
+----------------
+<img src="img/stream.png" alt="alt text" height="200">
+
+The Reactive Streams standard defines an upstream demand channel and a downstream data channel. Publishers do not send data until a request for N elements arrives via the demand channel, at which point they are free to push up to N elements downstream either in batches or individually. When outstanding demand exists, the publisher is free to push data to the subscriber as it becomes available. When demand is exhausted, the publisher cannot send data except as a response to demand signalled from downstream. This lack of demand, or backpressure, propagates upstream in a controlled manner, allowing the source node to choose between starting up more resources, slowing down, or dropping data.
+
+
+What's cool is that since data and demand travel in opposite directions, merging streams splits the upstream demand and splitting streams merges the downstream demand.
+
+<img src="img/merge.png" alt="alt text" height="200">
+<img src="img/split.png" alt="alt text" height="200">
+
+The Code
+--------
+RS is defined by the following minimal, heavily tested, set of interfaces.
+```
+trait Publisher[T] {
+  def subscribe(s: Subscriber[T]): Unit
+}
+
+trait Subscriber[T] {
+    def onSubscribe(s: Subscription): Unit
+    def onNext(t: T): Unit
+    def onError(t: Throwable): Unit
+    def onComplete(): Unit
+}
+
+trait Subscription {
+   def request(n: Unit): Unit
+   def cancel(): Unit
+}
+```
+
+This is great, but it's all very low level. Look at all those Unit return types! Fortunately, there's a domain-specific language for transforming and composing stream processing graphs.
+
+Akka Streams:
+--------------------------
+
+- Akka Streams has two major components: 
++ A high-level, type safe DSL for creating descriptions of stream processing graphs.
++ Machinery for transforming these descriptions into live stream processing graphs backed by Akka actors and implementing the Reactive Streams standard.
+
+
+We're going to use Akka Streams to count the number of times words are used in commments on each of the most popular sub-forums on Reddit. (Recap: Reddit is structured with subreddits at the top level. Users can post links to subreddits and add comments to links. Links and comments can be voted 'up' or 'down' by users.) We're going to use Reddit's API to get a list of popular subreddits, get a list of popular links for each subreddit, and then get popular comments for each link. Finally, we'll persist word counts for the comments of each subreddit.
+
+
+Let's start with an overview of the types we'll be working with. 
+
+```
 type WordCount = Map[String, Int]
 case class LinkListing(links: Seq[Link])
 case class Link(id: String, subreddit: String)
 case class CommentListing(subreddit: String, comments: Seq[Comment])
 case class Comment(subreddit: String, body: String)
 
-trait RedditAPI { // handles interaction with reddit's API,
+trait RedditAPI {
   def popularLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing]
   def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing]
-  def popularStrings(implicit ec: ExecutionContext): Future[Seq[String]]
-}
-
-trait KVStore { // in-memory key-value store
-  def addWords(subreddit: String, words: WordCount): Future[Unit]
-  def wordCounts: Future[Map[String, WordCount]]
+  def popularSubreddits(implicit ec: ExecutionContext): Future[Seq[String]]
 }
 ```
 
-Naive Solution:
---------------
+Sources
+-------
 
-Since the `RedditAPI` methods return futures, the simplest possible solution is to repeatedly use `flatMap` (via for-comprehension) and `Future.sequence` to produce a single `Future[Seq[Comment]]`.
+An instance of the type Source[Out] produces a potentially unbounded stream of elements of type Out. We'll start by creating a stream of subreddit names, represented as Strings.
 
-```scala
-object SimpleExample {
-  import RedditAPI._
-  import ExecutionContext.Implicits.global
+Sources can be created from Vectors (an indexed sequence roughly equivalent to an Array).
+```
+val subreddits: Source[String] = Source(args.toVector)
+```
 
-  def run =
-    for {
-      subreddits <- popularSubreddits
-      linklistings <- Future.sequence(subreddits.map(popularLinks))
-      links = linklistings.flatMap(_.links)
-      commentListings <- Future.sequence(links.map(popularComments))
-      comments = commentListings.flatMap(_.comments)
-    } yield comments
+Single-element sources can also be created from Futures, resulting in a Source that emits the result of the future if it succeeds or fails if the future fails.
+
+```
+val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
+```
+
+Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just pass the identity function to mapConcat.
+
+Sinks
+-----
+
+A Sink[In] consumes elements of type In.Some sinks produce values on completion. For example, ForeachSinks produce a Future[Unit] that completes when the stream completes. FoldSinks, which fold some number of elements A into a zero value B using a function (A, B) => B produce a Future[B] that completes when the stream completes.
+
+This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a Map[String, WordCount] that can be retrieved on stream completion
+
+```
+val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
+  FoldSink(Map.empty[String, WordCount])(
+    (acc: Map[String, WordCount], c: Comment) =>
+      mergeWordCounts(acc, Map(c.subreddit -> c.toWordCount))
+  )
+```
+
+Flows
+-----
+
+A Flow[In, Out] consumes elements of type In, applies some sequence of transformations, and emits elements of type Out.
+
+This Flow takes subreddit names and emits popular links for each supplied subreddit name.
+- We start by creating a Flow[String, String], a pipeline that applies no transformations.
+- We use via to append a throttle Flow.
+    + We'll define throttle in the next section. For now, just think of it as a black box Flow[T, T] that limits throughput to one message per redditAPIRate time units.
+- Next we use mapAsyncUnordered to fetch popular links for each subreddit name emitted by the throttle.
+    + mapAsyncUnordered is used here because we don't care about preserving ordering. It emits elements as soon as their Future completes, which keeps the occasional long-running call from blocking the entire stream.
+- Finally, we use mapConcat to flatten the resulting stream of LinkListings into a stream of Links.
+
+```
+  val fetchLinks: Flow[String, Link] =
+    Flow[String]
+    .via(throttle(redditAPIRate))
+    .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) )
+    .mapConcat( listing => listing.links )
+```
+
+This flow uses the same sequence of steps (with a different API call) to convert a stream of links into a stream of the most popular comments on those links.
+```
+val fetchComments: Flow[Link, Comment] =
+  Flow[Link]
+    .via(throttle(redditAPIRate))
+    .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
+    .mapConcat( listing => listing.comments )
+```
+
+Graphs
+------
+
+
+Not everything can be expressed as a linear sequence of stream processing steps. The Akka Streams DSL provides tools for building stream processing graphs with stream processing nodes that have multiple inputs and outputs. In this case, we want to zip a fast stream together with a slow one, to throttle the throughput of the fast stream to that of the the slow one. 
+ - Graphs can be complete or partial, with partial graphs having undefined sources, sinks or both.
+ - Complete graphs can be run as-is. 
+
+```
+def throttle[T](rate: FiniteDuration): Flow[T, T] = {
+  val tickSource = TickSource(rate, rate, () => () )
+  val zip = Zip[T, Unit]
+  val in = UndefinedSource[T]
+  val out = UndefinedSink[(T, Unit)]
+  PartialFlowGraph{ implicit builder =>
+    import FlowGraphImplicits._
+    in ~> zip.left
+    tickSource ~> zip.right
+    zip.out ~> out
+  }.toFlow(in, out).map{ case (t, _) => t }
 }
 ```
-This example fetches a list of subreddit names, issues simultaneous requests for the top links of each, then issues requests for comments for each link. Try it for yourself: open up a console and type `main.SimpleExample.run`. You'll see a burst of link listing requests which quickly start to fail as Reddit's servers rate limit your machine.
-
-Streams 101
------------
-
-[Scala DSL](http://doc.akka.io/api/akka-stream-and-http-experimental/1.0-M1/index.html#akka.stream.scaladsl.package): DSL for creating immutable stream processing descriptions that can be reused, composed, and materialized to create live streams composed of reactive stream primitives.
-- `Source[Out]`: a set of stream processing steps that has one open output and an attached input. Can be used as a Publisher.
-- `Flow[In,Out]`: a set of stream processing steps that has one open input and one open output.
-- `Sink[In]`: a set of stream processing steps that has one open input and an attached output. Can be used as a Subscriber.
-
-[Reactive Stream Primitives](https://github.com/reactive-streams/reactive-streams): used to represent live streams. These are created when a stream processing description is materialized.
-- `Subscriber[In]`: a component that accepts a sequenced stream of elements provided by a Publisher.
-- `Publisher[Out]`: a provider of a potentially unbounded number of sequenced elements, publishing them according to the demand received from its Subscriber(s).
 
 
-Streams Solution
-----------------
+Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith()
 
-First, we need a way to throttle a stream down to 1 message per time unit. We'll use the graph DSL to build a partial graph which we then convert to a flow.
+```
+val res: Future[Map[String, WordCount]] =
+  subreddits
+    .via(fetchLinks)
+    .via(fetchComments)
+    .runWith(wordCountSink)
 
-```scala
-  def throttle[T](rate: FiniteDuration): Flow[T, T] = {
-    val tickSource = TickSource(rate, rate, () => () )
-    val zip = Zip[T, Unit] 
-    val in = UndefinedSource[T]
-    val out = UndefinedSink[T]
-    PartialFlowGraph{ implicit builder =>
-      import FlowGraphImplicits._
-      in ~> zip.left
-      tickSource ~> zip.right
-      zip.out ~> Flow[(T,Unit)].map{ case (t, _) => t } ~> out
-    }.toFlow(in, out)
+res.onComplete{
+  case Success(wordcounts) =>
+    writeResults(wordcounts)
+    as.shutdown()
+  case Failure(f) =>
+    println(s"failed with $f")
+    as.shutdown()
   }
 ```
 
-This code constructs the following partial stream-processing graph. Since the Zip vertex outputs tuples of T and Unit, it can only produce elements when both `tickSource` and `in` have available elements. Since `tickSource` produces one element per `rate`, the graph can only produce one element per `rate` time units.
 
-```
-+------------+
-| tickSource +-Unit-+
-+------------+      +---> +-----+            +-----+      +-----+
-                          | zip +-(T,Unit)-> | map +--T-> | out |
-+----+              +---> +-----+            +-----+      +-----+
-| in +----T---------+
-+----+
-````
+Conclusion
+----------
 
-Finally, the graph is converted to a flow from the vertex `in` to the vertex `out` using `toFlow(in, out)`.
-
-
-
-Using throttle, we can now define a `Flow[String, Comment]` which handles all interactions with Reddit's API.  
-
-```scala
-  val fetchComments: Flow[String, Comment] =
-    // 0) Create a duct that applies no transformations.
-    Flow[String]
-        // 1) Throttle the rate at which the next step can receive subreddit names.
-        .via(throttle)
-        // 2) Fetch links. Subject to rate limiting.
-        .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) )
-        // 3) Flatten a stream of link listings into a stream of links.
-        .mapConcat( listing => listing.links )
-        // 4) Throttle the rate at which the next step can receive links.
-        .via(throttle)
-        // 5) Fetch comments. Subject to rate limiting.
-        .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
-        // 6) Flatten a stream of comment listings into a stream of comments.
-        .mapConcat( listing => listing.comments )
-```
-Note that `mapAsyncUnordered` does not preserve order, which keeps the rare slow request from slowing down the entire stream. If order is important, use `mapAsync` instead.
-
-
-The next step calculates word counts for each comment and writes them to the store, batching writes to avoid excessive IO.
-
-```scala
- val persistBatch: Flow[Comment, Int] =
-    // 0) Create a duct that applies no transformations.
-    Flow[Comment]
-        // 1) Group comments, emitting a batch every 5000 elements
-        //    or every 5 seconds, whichever comes first.
-        .groupedWithin(5000, 5 second)
-        // 2) Group comments by subreddit and write the wordcount
-        //    for each group to the store. This step outputs
-        //    the size of each batch after it is persisted for logging
-        .mapAsyncUnordered{ batch =>
-          val fs = batch
-            .groupBy(_.subreddit)
-            .mapValues(_.map(_.toWordCount).reduce(merge))
-            .map{ case (subreddit, wordcount) =>
-              store.addWords(subreddit, wordcount)
-            }
-          Future.sequence(fs).map{ _ => batch.size }
-        }
-```
-
-So far, no processing has occurred. We've just described what we want to do. Now we create a starting flow of subreddit names to which we append the Flows created in the previous steps, yielding a single `Source[Int]` that we can materialize and run using foreach.
-
-```scala
-def main(args: Array[String]): Unit = {
-    // 0) Create a Source of String names, using either the provided
-    //    argument vector or the result of the popularSubreddits API call.
-    val subreddits: Source[String] =
-      if (args.isEmpty)
-        Source(RedditAPI.popularSubreddits).mapConcat(identity)
-      else
-        Source(args.toVector)
-
-    // 1) Append flows to the initial source and materialize it via forEach.
-    //    The resulting future succeeds if stream processing completes 
-    //    or fails if an error occurs.
-    val streamF: Future[Unit] =
-      subreddits
-        .via(fetchComments)
-        .via(persistBatch)
-        .foreach{ n => println(s"persisted $n comments")}
-
-    // 2) When stream processing is finished, load the resulting
-    //    word counts from the store, log some basic statistics,
-    //    and write them to a .tsv files (code omited for brevity)
-    ...
-    }
-```
+- We started by defining small pipeline segments like throttle, used them to build larger pipeline segments such as fetchLinks and fetchComments, then used these larger segments to create our stream processing graph. These smaller stream processing segments are immutable, thread safe, and fully reusable. They could easily be stored statically, on some object, to avoid the overhead of repeated initialization.
+- Akka Streams is a great tool that can (and should) be used for more complex problems.
+- Resources:
+  + [Akka Streams Cookbook](http://doc.akka.io/docs/akka-stream-and-http-experimental/1.0-M2/scala/stream-cookbook.html)
+  + [Reactive Streams: Handling Data-Flows the Reactive Way (great talk by Roland Kuhn. Some of the above graphics are taken from this talk's slides) )](http://www.infoq.com/presentations/reactive-steams-akka)
