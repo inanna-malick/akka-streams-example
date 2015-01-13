@@ -4,12 +4,16 @@ import scala.concurrent.duration._
 import scala.concurrent._
 import scala.util.{Success, Failure}
 import scala.collection.immutable._
-import akka.agent.Agent
+import akka.stream._
+import akka.stream._
+import akka.actor._
+import akka.stream.actor._
 import scalaz._
 import Scalaz._
 import Util._
 import java.io.File
 import java.nio.file.{Paths, Files}
+import org.reactivestreams.Subscriber
 import java.nio.charset.StandardCharsets
 
 
@@ -41,32 +45,23 @@ object Util {
     Files.write(Paths.get(fname), tsv.getBytes(StandardCharsets.UTF_8))
   }
 
-  def clearOutputDir() = 
+  def clearOutputDir() =
     for {
       files <- Option(new File("res").listFiles)
       file <- files if file.getName.endsWith(".tsv")
     } file.delete()
 
   type WordCount = Map[String, Int]
-}
 
+  def mergeWordCounts(a: Map[String, WordCount], b: Map[String, WordCount]) = a |+| b
 
-class KVStore(implicit val ec: ExecutionContext) {
-  private val commentCount: Store[Map[String,WordCount]] = new Store
-
-  def addWords(subreddit: String, words: WordCount): Future[Unit] = {
-    commentCount.update(Map(subreddit -> words))
+  def writeResults(wordcounts: Map[String, WordCount]) = {
+    clearOutputDir()
+    wordcounts.foreach{ case (key, wordcount) =>
+      val fname = s"res/$key.tsv"
+      println(s"write wordcount for $key to $fname")
+      writeTsv(fname, wordcount)
+      println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
+    }
   }
-
-  def wordCounts: Future[Map[String, WordCount]] = commentCount.read
-}
-
-class Store[T](implicit val m: Monoid[T], implicit val ec: ExecutionContext) {
-  private val store: Agent[T] = Agent(m.zero)
-
-  def update(in: T): Future[Unit] =
-    store.alter(m.append(_, in)).map( _ => () )
-
-  def read: Future[T] =
-    store.future()
 }
