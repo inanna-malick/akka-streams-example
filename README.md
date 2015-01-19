@@ -87,11 +87,39 @@ Sources can be created from Vectors (an indexed sequence roughly equivalent to a
 val subreddits: Source[String] = Source(args.toVector)
 ```
 
+Try it out:
+```
+import com.pkinsky.WordCount._
+import akka.stream.scaladsl._
+Source(Array("funny", "sad").toVector).foreach(println)
+```
+As expected:
+```
+funny
+sad
+```
+
+
 Single-element sources can also be created from Futures, resulting in a Source that emits the result of the future if it succeeds or fails if the future fails.
 
 ```
-val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
+import com.pkinsky.WordCount._
+import com.pkinsky.RedditAPI
+Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(println)
 ```
+
+Try it out:
+```
+--> started fetch popular subreddits at t0 + 1732648
+	<-- finished fetch popular subreddits after 373 millis
+funny
+AdviceAnimals
+pics
+aww
+todayilearned
+```
+2 out of the top 5 subreddits are  dedicated to pictures of cute animals (AdviceAnimals and aww). Insight!
+
 
 Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just pass the identity function to mapConcat.
 
@@ -109,6 +137,23 @@ val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
       mergeWordCounts(acc, Map(c.subreddit -> c.toWordCount))
   )
 ```
+
+This one's a bit harder to test. Instead of producing a stream of items that we can consume and print, it consumes comments and folds them together to produce a single value.  
+```
+import com.pkinsky._
+import WordCount._
+val comments = Vector(Comment("news", "hello world"), 
+                      Comment("news", "cruel world"), 
+                      Comment("funny", "hello world"))
+val f: Future[Map[String, WordCount]] = Source(comments).runWith(wordCountSink)
+f.onComplete(println)
+```
+
+The future completes succesfully when the Sink finishes processing the last element produced by the Source, resulting in:
+```
+Success(Map(funny -> Map(world -> 1, hello -> 1), news -> Map(world -> 2, cruel -> 1, hello -> 1)))
+```
+
 
 Flows
 -----
@@ -131,6 +176,39 @@ This Flow takes subreddit names and emits popular links for each supplied subred
     .mapConcat( listing => listing.links )
 ```
 
+Let's test this out! Here we create a source using 4 subreddit names, pipe it through `fetchLinks`, and use foreach to consume and print each element emitted by the resulting `Source`.
+```
+import akka.stream.scaladsl._
+import com.pkinsky.WordCount._
+Source(Vector("funny", "sad", "politics", "news")).via(fetchLinks).foreach(println)
+```
+
+This outputs:
+```
+--> started links: r/funny/top at t0 + 193
+--> started links: r/sad/top at t0 + 486
+	<-- finished links: r/funny/top after 305 millis
+Link(202wd3,funny)
+(more links...)
+Link(15jrds,funny)
+	<-- finished links: r/sad/top after 228 millis
+Link(2hasrr,sad)
+(more links...)
+Link(w346r,sad)
+--> started links: r/politics/top at t0 + 996
+	<-- finished links: r/politics/top after 349 millis
+Link(1ryfk0,politics)
+(more links...)
+Link(1wxyyi,politics)
+--> started links: r/news/top at t0 + 1495
+	<-- finished links: r/news/top after 141 millis
+Link(2kp34z,news)
+(more links...)
+Link(2ooscv,news)
+```
+Note how about 500 milliseconds elapse between each fetch links call (193, 486, 996 and 1495 milliseconds) due to the throttle. As each call completes w/ a LinkListing, the pipeline emits a batch of Link objects.
+
+
 This flow uses the same sequence of steps (with a different API call) to convert a stream of links into a stream of the most popular comments on those links.
 ```
 val fetchComments: Flow[Link, Comment] =
@@ -138,6 +216,24 @@ val fetchComments: Flow[Link, Comment] =
     .via(throttle(redditAPIRate))
     .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
     .mapConcat( listing => listing.comments )
+```
+
+Let's test this flow with one of the links outputted by the previous test. 
+```
+import akka.stream.scaladsl._
+import com.pkinsky.WordCount._
+import com.pkinsky.Link
+Source(Vector(Link("2ooscv","news"))).via(fetchComments).foreach(println)
+```
+`Source(Vector(Link("2ooscv","news")))` emits a single link that maps to this article: [Illinois General Assembly passes bill to ban citizens from recording police](http://www.illinoispolicy.org/illinois-general-assembly-revives-recording-ban/). Piping that source through the `fetchComments` flow creates a Source[Comment] that fetches and emits the top comments on that link:
+
+```
+--> started comments: r/news/2ooscv/comments at t0 + 615
+	<-- finished comments: r/news/2ooscv/comments after 6104 millis
+Comment(news,Ah i am sure it will be overturned eventually.  What a waste of money and time.)
+Comment(news,If you can't stop police from murdering people, stop people from finding out about it. )
+Comment(news,If nobody videotapes the beatings, morale will definitely improve!)
+(...many more comments)
 ```
 
 Graphs
@@ -164,7 +260,7 @@ def throttle[T](rate: FiniteDuration): Flow[T, T] = {
 ```
 
 
-Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith()
+Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith().
 
 ```
 val res: Future[Map[String, WordCount]] =
@@ -173,14 +269,7 @@ val res: Future[Map[String, WordCount]] =
     .via(fetchComments)
     .runWith(wordCountSink)
 
-res.onComplete{
-  case Success(wordcounts) =>
-    writeResults(wordcounts)
-    as.shutdown()
-  case Failure(f) =>
-    println(s"failed with $f")
-    as.shutdown()
-  }
+res.onComplete(writeResults)
 ```
 
 
