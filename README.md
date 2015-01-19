@@ -87,11 +87,39 @@ Sources can be created from Vectors (an indexed sequence roughly equivalent to a
 val subreddits: Source[String] = Source(args.toVector)
 ```
 
+Try it out:
+```
+import com.pkinsky.WordCount._
+import akka.stream.scaladsl._
+Source(Array("funny", "sad").toVector).foreach(println)
+```
+As expected:
+```
+funny
+sad
+```
+
+
 Single-element sources can also be created from Futures, resulting in a Source that emits the result of the future if it succeeds or fails if the future fails.
 
 ```
-val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
+import com.pkinsky.WordCount._
+import com.pkinsky.RedditAPI
+Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(println)
 ```
+
+Try it out:
+```
+--> started fetch popular subreddits at t0 + 1732648
+	<-- finished fetch popular subreddits after 373 millis
+funny
+AdviceAnimals
+pics
+aww
+todayilearned
+```
+2 out of the top 5 subreddits are  dedicated to pictures of cute animals (AdviceAnimals and aww). Insight!
+
 
 Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just pass the identity function to mapConcat.
 
