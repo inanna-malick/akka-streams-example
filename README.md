@@ -61,8 +61,14 @@ Akka Streams:
 We're going to use Akka Streams to count the number of times words are used in commments on each of the most popular sub-forums on Reddit. (Recap: Reddit is structured with subreddits at the top level. Users can post links to subreddits and add comments to links. Links and comments can be voted 'up' or 'down' by users.) We're going to use Reddit's API to get a list of popular subreddits, get a list of popular links for each subreddit, and then get popular comments for each link. Finally, we'll persist word counts for the comments of each subreddit.
 
 
-Let's start with an overview of the types we'll be working with. To recap, a Future[T] is an object holding a value of type T which may become available at some point. This value is usually the result of some other computation. For example: `def execute(req: HttpRequest)(implicit ec: ExecutionContext): Future[HttpResponse]` is a function that executes an `HttpRequest` and, instead of blocking until a response is received, immediately returns a `Future[HttpResponse]`. (The `implicit ec: ExecutionContext` parameter provides a thread pool for executing callbacks on futures, which is outside the scope of this post)
+Let's start with an overview of the types we'll be working with.
 
+Scala Futures
+-------------
+You can skip this paragraph if you're already familiar with Scala's Future class. If not, a Future[T] is an object holding a value of type T which may become available at some point. This value is usually the result of some other computation. For example: `def execute(req: HttpRequest)(implicit ec: ExecutionContext): Future[HttpResponse]` is a function that executes an `HttpRequest` and, instead of blocking until a response is received, immediately returns a `Future[HttpResponse]`. (The `implicit ec: ExecutionContext` parameter provides a thread pool for executing callbacks on futures, which is outside the scope of this post)
+
+Reddit API Types
+------------
 ```
 type WordCount = Map[String, Int]i
 case class LinkListing(links: Seq[Link])
