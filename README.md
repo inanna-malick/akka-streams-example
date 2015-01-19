@@ -64,7 +64,7 @@ We're going to use Akka Streams to count the number of times words are used in c
 Let's start with an overview of the types we'll be working with. To recap, a Future[T] is an object holding a value of type T which may become available at some point. This value is usually the result of some other computation. For example: `def execute(req: HttpRequest)(implicit ec: ExecutionContext): Future[HttpResponse]` is a function that executes an `HttpRequest` and, instead of blocking until a response is received, immediately returns a `Future[HttpResponse]`. (The `implicit ec: ExecutionContext` parameter provides a thread pool for executing callbacks on futures, which is outside the scope of this post)
 
 ```
-type WordCount = Map[String, Int]
+type WordCount = Map[String, Int]i
 case class LinkListing(links: Seq[Link])
 case class Link(id: String, subreddit: String)
 case class CommentListing(subreddit: String, comments: Seq[Comment])
@@ -103,12 +103,20 @@ sad
 Single-element sources can also be created from Futures, resulting in a Source that emits the result of the future if it succeeds or fails if the future fails.
 
 ```
-import com.pkinsky.WordCount._
-import com.pkinsky.RedditAPI
+val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
+```
+
+Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just pass the identity function to mapConcat.
+
+
+Try it out:
+```
+import com.pkinsky._
+import WordCount._
 Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(println)
 ```
 
-Try it out:
+2 out of the top 5 subreddits are  dedicated to pictures of cute animals (AdviceAnimals and aww). Insight!
 ```
 --> started fetch popular subreddits at t0 + 1732648
 	<-- finished fetch popular subreddits after 373 millis
@@ -118,10 +126,7 @@ pics
 aww
 todayilearned
 ```
-2 out of the top 5 subreddits are  dedicated to pictures of cute animals (AdviceAnimals and aww). Insight!
 
-
-Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just pass the identity function to mapConcat.
 
 Sinks
 -----
