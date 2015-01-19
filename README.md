@@ -53,7 +53,7 @@ This is great, but it's all very low level. Look at all those Unit return types!
 Akka Streams:
 --------------------------
 
-- Akka Streams has two major components: 
+Akka Streams has two major components: 
 + A high-level, type safe DSL for creating descriptions of stream processing graphs.
 + Machinery for transforming these descriptions into live stream processing graphs backed by Akka actors and implementing the Reactive Streams standard.
 
@@ -63,12 +63,12 @@ We're going to use Akka Streams to count the number of times words are used in c
 
 Let's start with an overview of the types we'll be working with.
 
-Scala Futures
--------------
+**Scala Futures**:
+
 You can skip this paragraph if you're already familiar with Scala's Future class. If not, a Future[T] is an object holding a value of type T which may become available at some point. This value is usually the result of some other computation. For example: `def execute(req: HttpRequest)(implicit ec: ExecutionContext): Future[HttpResponse]` is a function that executes an `HttpRequest` and, instead of blocking until a response is received, immediately returns a `Future[HttpResponse]`. (The `implicit ec: ExecutionContext` parameter provides a thread pool for executing callbacks on futures, which is outside the scope of this post)
 
-Reddit API Types
-------------
+**Reddit API**:
+
 ```
 type WordCount = Map[String, Int]i
 case class LinkListing(links: Seq[Link])
@@ -112,7 +112,7 @@ Single-element sources can also be created from Futures, resulting in a Source t
 val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
 ```
 
-Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting Source[Seq[String]] into a Source[String]. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a Source[Seq[T]], we just pass the identity function to mapConcat.
+Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting `Source[Seq[String]]` into a `Source[String]`. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a `Source[Seq[T]]`, we just pass the identity function to mapConcat.
 
 
 Try it out:
@@ -138,7 +138,7 @@ todayilearned
 Sinks
 -----
 
-A Sink[In] consumes elements of type In.Some sinks produce values on completion. For example, ForeachSinks produce a Future[Unit] that completes when the stream completes. FoldSinks, which fold some number of elements A into a zero value B using a function (A, B) => B produce a Future[B] that completes when the stream completes.
+A `Sink[In]` consumes elements of type `In`. Some sinks produce values on completion. For example, ForeachSinks produce a Future[Unit] that completes when the stream completes. `FoldSink[B,A]`, which fold some number of elements of type `A` into a zero value of type `B` using a function `(A, B) => B`, producing a `Future[B]` that completes when the stream completes.
 
 This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a Map[String, WordCount] that can be retrieved on stream completion
 
@@ -173,12 +173,12 @@ Success(Map(funny -> Map(world -> 1, hello -> 1), news -> Map(world -> 2, cruel 
 Flows
 -----
 
-A Flow[In, Out] consumes elements of type In, applies some sequence of transformations, and emits elements of type Out.
+A `Flow[In, Out]` consumes elements of type `In`, applies some sequence of transformations, and emits elements of type `Out`.
 
 This Flow takes subreddit names and emits popular links for each supplied subreddit name.
-- We start by creating a Flow[String, String], a pipeline that applies no transformations.
+- We start by creating a `Flow[String, String]`, a pipeline that applies no transformations.
 - We use via to append a throttle Flow.
-    + We'll define throttle in the next section. For now, just think of it as a black box Flow[T, T] that limits throughput to one message per redditAPIRate time units.
+    + We'll define throttle in the next section. For now, just think of it as a black box `Flow[T, T]` that limits throughput to one message per redditAPIRate time units.
 - Next we use mapAsyncUnordered to fetch popular links for each subreddit name emitted by the throttle.
     + mapAsyncUnordered is used here because we don't care about preserving ordering. It emits elements as soon as their Future completes, which keeps the occasional long-running call from blocking the entire stream.
 - Finally, we use mapConcat to flatten the resulting stream of LinkListings into a stream of Links.
@@ -221,7 +221,7 @@ Link(2kp34z,news)
 (more links...)
 Link(2ooscv,news)
 ```
-Note how about 500 milliseconds elapse between each fetch links call (193, 486, 996 and 1495 milliseconds) due to the throttle. As each call completes w/ a LinkListing, the pipeline emits a batch of Link objects.
+Note how about 500 milliseconds elapse between each fetch links call (193, 486, 996 and 1495 milliseconds) due to the throttle. As each call completes with a LinkListing, the pipeline emits a batch of Link objects.
 
 
 This flow uses the same sequence of steps (with a different API call) to convert a stream of links into a stream of the most popular comments on those links.
