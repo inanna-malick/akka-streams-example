@@ -161,7 +161,7 @@ Link(2kp34z,news)
 (more links...)
 Link(2ooscv,news)
 ```
-Note how about 500 milliseconds elapse between each fetch links call. (193, 486, 996 and 1495 milliseconds). As each call completes w/ a LinkListing, the pipeline emits a batch of Link objects.
+Note how about 500 milliseconds elapse between each fetch links call (193, 486, 996 and 1495 milliseconds) due to the throttle. As each call completes w/ a LinkListing, the pipeline emits a batch of Link objects.
 
 
 This flow uses the same sequence of steps (with a different API call) to convert a stream of links into a stream of the most popular comments on those links.
@@ -180,7 +180,7 @@ import com.pkinsky.WordCount._
 import com.pkinsky.Link
 Source(Vector(Link("2ooscv","news"))).via(fetchComments).foreach(println)
 ```
-`Source(Vector(Link("2ooscv","news")))` emits a single link that maps to this article: [Illinois General Assembly passes bill to ban citizens from recording police](http://www.illinoispolicy.org/illinois-general-assembly-revives-recording-ban/). Piping that source through the `fetchComments` flow creates a Source[Comment] that emits the 2000 most popular comments on that link:
+`Source(Vector(Link("2ooscv","news")))` emits a single link that maps to this article: [Illinois General Assembly passes bill to ban citizens from recording police](http://www.illinoispolicy.org/illinois-general-assembly-revives-recording-ban/). Piping that source through the `fetchComments` flow creates a Source[Comment] that fetches and emits the top comments on that link:
 
 ```
 --> started comments: r/news/2ooscv/comments at t0 + 615
