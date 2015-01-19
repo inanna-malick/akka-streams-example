@@ -138,6 +138,23 @@ val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
   )
 ```
 
+This one's a bit harder to test. Instead of producing a stream of items that we can consume and print, it consumes comments and folds them together to produce a single value.  
+```
+import com.pkinsky._
+import WordCount._
+val comments = Vector(Comment("news", "hello world"), 
+                      Comment("news", "cruel world"), 
+                      Comment("funny", "hello world"))
+val f: Future[Map[String, WordCount]] = Source(comments).runWith(wordCountSink)
+f.onComplete(println)
+```
+
+The future completes succesfully when the Sink finishes processing the last element produced by the Source, resulting in:
+```
+Success(Map(funny -> Map(world -> 1, hello -> 1), news -> Map(world -> 2, cruel -> 1, hello -> 1)))
+```
+
+
 Flows
 -----
 
