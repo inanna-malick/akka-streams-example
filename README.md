@@ -125,8 +125,8 @@ Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(println)
 
 This outputs:
 ```
---> started fetch popular subreddits at t0 + 1732648
-	<-- finished fetch popular subreddits after 373 millis
+--> started fetch popular subreddits at t0 + 608
+	<-- finished fetch popular subreddits after 166 millis
 funny
 AdviceAnimals
 pics
@@ -281,8 +281,7 @@ import akka.stream.scaladsl._
 import com.pkinsky._
 import WordCount._
 import scala.concurrent.duration._
-Source((1 to 5).toVector).via(throttle[Int](500 millis))
-  .foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
+Source((1 to 5).toVector).via(throttle[Int](500 millis)).foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
 yields:
 ```
@@ -295,6 +294,8 @@ yields:
 
 Just for fun, let's remove the throttle:
 ```
+import akka.stream.scaladsl._
+import com.pkinsky.WordCount._
 Source((1 to 1000).toVector).foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
 Without the throttle, 1000 elements are consumed within 64 ms.
