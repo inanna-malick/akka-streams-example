@@ -260,7 +260,7 @@ def throttle[T](rate: FiniteDuration): Flow[T, T] = {
 ```
 
 
-Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith()
+Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith().
 
 ```
 val res: Future[Map[String, WordCount]] =
@@ -269,14 +269,7 @@ val res: Future[Map[String, WordCount]] =
     .via(fetchComments)
     .runWith(wordCountSink)
 
-res.onComplete{
-  case Success(wordcounts) =>
-    writeResults(wordcounts)
-    as.shutdown()
-  case Failure(f) =>
-    println(s"failed with $f")
-    as.shutdown()
-  }
+res.onComplete(writeResults)
 ```
 
 
