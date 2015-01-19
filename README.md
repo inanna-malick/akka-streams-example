@@ -111,6 +111,7 @@ Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional 
 
 Try it out:
 ```
+import akka.stream.scaladsl._
 import com.pkinsky._
 import WordCount._
 Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(println)
@@ -145,8 +146,11 @@ val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
 
 This one's a bit harder to test. Instead of producing a stream of items that we can consume and print, it consumes comments and folds them together to produce a single value.  
 ```
+import akka.stream.scaladsl._
 import com.pkinsky._
+import Util._
 import WordCount._
+import scala.concurrent.Future
 val comments = Vector(Comment("news", "hello world"), 
                       Comment("news", "cruel world"), 
                       Comment("funny", "hello world"))
@@ -270,7 +274,8 @@ import akka.stream.scaladsl._
 import com.pkinsky._
 import WordCount._
 import scala.concurrent.duration._
-Source((1 to 5).toVector).via(throttle[Int](500 millis)).foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
+Source((1 to 5).toVector).via(throttle[Int](500 millis))
+  .foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
 yields:
 ```
