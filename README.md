@@ -131,6 +131,39 @@ This Flow takes subreddit names and emits popular links for each supplied subred
     .mapConcat( listing => listing.links )
 ```
 
+Let's test this out! Here we create a source using 4 subreddit names, pipe it through `fetchLinks`, and use foreach to consume and print each element emitted by the resulting `Source`.
+```
+import akka.stream.scaladsl._
+import com.pkinsky.WordCount._
+Source(Vector("funny", "sad", "politics", "news")).via(fetchLinks).foreach(println)
+```
+
+This outputs:
+```
+--> started links: r/funny/top at t0 + 193
+--> started links: r/sad/top at t0 + 486
+	<-- finished links: r/funny/top after 305 millis
+Link(202wd3,funny)
+(more links...)
+Link(15jrds,funny)
+	<-- finished links: r/sad/top after 228 millis
+Link(2hasrr,sad)
+(more links...)
+Link(w346r,sad)
+--> started links: r/politics/top at t0 + 996
+	<-- finished links: r/politics/top after 349 millis
+Link(1ryfk0,politics)
+(more links...)
+Link(1wxyyi,politics)
+--> started links: r/news/top at t0 + 1495
+	<-- finished links: r/news/top after 141 millis
+Link(2kp34z,news)
+(more links...)
+Link(2ooscv,news)
+```
+Note how about 500 milliseconds elapse between each fetch links call. (193, 486, 996 and 1495 milliseconds). As each call completes w/ a LinkListing, the pipeline emits a batch of Link objects.
+
+
 This flow uses the same sequence of steps (with a different API call) to convert a stream of links into a stream of the most popular comments on those links.
 ```
 val fetchComments: Flow[Link, Comment] =
@@ -138,6 +171,24 @@ val fetchComments: Flow[Link, Comment] =
     .via(throttle(redditAPIRate))
     .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
     .mapConcat( listing => listing.comments )
+```
+
+Let's test this flow with one of the links outputted by the previous test. 
+```
+import akka.stream.scaladsl._
+import com.pkinsky.WordCount._
+import com.pkinsky.Link
+Source(Vector(Link("2ooscv","news"))).via(fetchComments).foreach(println)
+```
+`Source(Vector(Link("2ooscv","news")))` emits a single link that maps to this article: [Illinois General Assembly passes bill to ban citizens from recording police](http://www.illinoispolicy.org/illinois-general-assembly-revives-recording-ban/). Piping that source through the `fetchComments` flow creates a Source[Comment] that emits the 2000 most popular comments on that link:
+
+```
+--> started comments: r/news/2ooscv/comments at t0 + 615
+	<-- finished comments: r/news/2ooscv/comments after 6104 millis
+Comment(news,Ah i am sure it will be overturned eventually.  What a waste of money and time.)
+Comment(news,If you can't stop police from murdering people, stop people from finding out about it. )
+Comment(news,If nobody videotapes the beatings, morale will definitely improve!)
+(...many more comments)
 ```
 
 Graphs
