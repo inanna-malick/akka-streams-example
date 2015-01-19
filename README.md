@@ -86,7 +86,7 @@ trait RedditAPI {
 Sources
 -------
 
-An instance of the type Source[Out] produces a potentially unbounded stream of elements of type Out. We'll start by creating a stream of subreddit names, represented as Strings.
+An instance of the type `Source[Out]` produces a potentially unbounded stream of elements of type `Out`. We'll start by creating a stream of subreddit names, represented as Strings.
 
 Sources can be created from Vectors (an indexed sequence roughly equivalent to an Array).
 ```
@@ -112,7 +112,7 @@ Single-element sources can also be created from Futures, resulting in a Source t
 val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
 ```
 
-Since popularSubreddits creates a `Future[Seq[String]]`, we take the additional step of using mapConcat to flatten the resulting `Source[Seq[String]]` into a `Source[String]`. The mapConcat method 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a `Source[Seq[T]]`, we just pass the identity function to mapConcat.
+Since `popularSubreddits` creates a `Future[Seq[String]]`, we take the additional step of using `mapConcat` to flatten the resulting `Source[Seq[String]]` into a `Source[String]`. `mapConcat` 'Transforms each input element into a sequence of output elements that is then flattened into the output stream'. Since we already have a `Source[Seq[T]]`, we just pass the identity function to mapConcat.
 
 
 Try it out:
@@ -123,7 +123,7 @@ import WordCount._
 Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(println)
 ```
 
-2 out of the top 5 subreddits are  dedicated to pictures of cute animals (AdviceAnimals and aww). Insight!
+This outputs:
 ```
 --> started fetch popular subreddits at t0 + 1732648
 	<-- finished fetch popular subreddits after 373 millis
@@ -133,6 +133,7 @@ pics
 aww
 todayilearned
 ```
+2 out of the top 5 subreddits are  dedicated to pictures of cute animals (AdviceAnimals and aww). Insight!
 
 
 Sinks
@@ -140,7 +141,7 @@ Sinks
 
 A `Sink[In]` consumes elements of type `In`. Some sinks produce values on completion. For example, ForeachSinks produce a Future[Unit] that completes when the stream completes. `FoldSink[B,A]`, which fold some number of elements of type `A` into a zero value of type `B` using a function `(A, B) => B`, producing a `Future[B]` that completes when the stream completes.
 
-This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a Map[String, WordCount] that can be retrieved on stream completion
+This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a `Map[String, WordCount]` that can be retrieved on stream completion
 
 ```
 val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
