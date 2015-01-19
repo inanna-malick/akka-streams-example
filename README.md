@@ -221,8 +221,8 @@ val fetchComments: Flow[Link, Comment] =
 Let's test this flow with one of the links outputted by the previous test. 
 ```
 import akka.stream.scaladsl._
-import com.pkinsky.WordCount._
-import com.pkinsky.Link
+import com.pkinsky._
+import WordCount._
 Source(Vector(Link("2ooscv","news"))).via(fetchComments).foreach(println)
 ```
 `Source(Vector(Link("2ooscv","news")))` emits a single link that maps to this article: [Illinois General Assembly passes bill to ban citizens from recording police](http://www.illinoispolicy.org/illinois-general-assembly-revives-recording-ban/). Piping that source through the `fetchComments` flow creates a Source[Comment] that fetches and emits the top comments on that link:
@@ -257,6 +257,34 @@ def throttle[T](rate: FiniteDuration): Flow[T, T] = {
     zip.out ~> out
   }.toFlow(in, out).map{ case (t, _) => t }
 }
+```
+
+Let's test it out:
+```
+import akka.stream.scaladsl._
+import com.pkinsky._
+import WordCount._
+import scala.concurrent.duration._
+Source((1 to 5).toVector).via(throttle[Int](500 millis)).foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
+```
+yields:
+```
+1 @  1421640216506
+2 @  1421640217006
+3 @  1421640217506
+4 @  1421640218006
+5 @  1421640218507
+```
+
+Just for fun, let's remove the throttle:
+```
+Source((1 to 1000).toVector).foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
+```
+Without the throttle, 1000 elements are consumed within 64 ms.
+```
+1 @ 1421641414420
+...
+1000 @ 1421641414484
 ```
 
 
