@@ -139,7 +139,7 @@ todayilearned
 Sinks
 -----
 
-A `Sink[In]` consumes elements of type `In`. Some sinks produce values on completion. For example, ForeachSinks produce a Future[Unit] that completes when the stream completes. `FoldSink[B,A]`, which fold some number of elements of type `A` into a zero value of type `B` using a function `(A, B) => B`, producing a `Future[B]` that completes when the stream completes.
+A `Sink[In]` consumes elements of type `In`. Some sinks produce values on completion. For example, ForeachSinks produce a Future[Unit] that completes when the stream completes. FoldSinks, which fold some number of elements of type `A` into an initial value of type `B` using a function `(A, B) => B`, produces a `Future[B]` that completes when the stream completes.
 
 This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a `Map[String, WordCount]` that can be retrieved on stream completion
 
