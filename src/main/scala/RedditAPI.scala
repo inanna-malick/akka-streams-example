@@ -1,4 +1,4 @@
-package main
+package com.pkinsky
 
 import dispatch._
 import Util.timedFuture
@@ -30,6 +30,7 @@ object RedditAPI {
       Http(page OK dispatch.as.json4s.Json).map(json => CommentListing.fromJson(json, link.subreddit))
     }, CommentListing(link.subreddit, Seq.empty))
 
+
   def popularSubreddits(implicit ec: ExecutionContext): Future[Seq[String]] = 
     timedFuture("fetch popular subreddits"){
       val page = url(s"http://www.reddit.com/subreddits/popular.json").GET <<? Map("limit" -> subredditsToFetch.toString) <:< useragent
@@ -37,7 +38,6 @@ object RedditAPI {
         json.\("data").\("children").children
           .map(_.\("data").\("url"))
           .collect{ case JString(url) => url.substring(3, url.length - 1) }
-          .map{ x => println(x); x}
         }
     }
 }

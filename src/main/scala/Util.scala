@@ -1,8 +1,8 @@
-package main
+package com.pkinsky
 
 import scala.concurrent.duration._
 import scala.concurrent._
-import scala.util.{Success, Failure}
+import scala.util.{Success, Failure, Try}
 import scala.collection.immutable._
 import akka.stream._
 import akka.stream._
@@ -18,9 +18,12 @@ import java.nio.charset.StandardCharsets
 
 
 object Util {
+
+  val tZero = System.currentTimeMillis()
+
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
-    println(s"--> started $name")
+    println(s"--> started $name at t0 + ${start - tZero}")
     f.andThen{
       case Success(t) =>
         val end = System.currentTimeMillis()
@@ -55,13 +58,19 @@ object Util {
 
   def mergeWordCounts(a: Map[String, WordCount], b: Map[String, WordCount]) = a |+| b
 
-  def writeResults(wordcounts: Map[String, WordCount]) = {
-    clearOutputDir()
-    wordcounts.foreach{ case (key, wordcount) =>
-      val fname = s"res/$key.tsv"
-      println(s"write wordcount for $key to $fname")
-      writeTsv(fname, wordcount)
-      println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
-    }
+  def writeResults(wordcounts: Try[Map[String, WordCount]])(implicit as: ActorSystem) = wordcounts match {
+    case Success(wordcounts) =>
+      clearOutputDir()
+      wordcounts.foreach{ case (key, wordcount) =>
+        val fname = s"res/$key.tsv"
+        println(s"write wordcount for $key to $fname")
+        writeTsv(fname, wordcount)
+        println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
+      }
+      as.shutdown()
+
+    case Failure(f) => 
+      println(s"failed with $f")
+      as.shutdown()
   }
 }
