@@ -1,10 +1,10 @@
-package main
+package com.pkinsky
 
 import akka.actor.ActorSystem
 import akka.stream.scaladsl._
 import akka.stream._
 import akka.stream.actor._
-
+import scala.language.postfixOps
 import scala.collection.immutable.{Vector, Seq}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -19,7 +19,7 @@ object WordCount {
   val settings = MaterializerSettings(as)
   implicit val mat = FlowMaterializer(settings)
 
-  val redditAPIRate = 250 millis
+  val redditAPIRate = 500 millis
 
   /**
     builds the following stream-processing graph.
@@ -80,14 +80,7 @@ def main(args: Array[String]): Unit = {
       .via(fetchComments)
       .runWith(wordCountSink)
 
-    res.onComplete{
-      case Success(wordcounts) =>
-        writeResults(wordcounts)
-        as.shutdown()
-      case Failure(f) =>
-        println(s"failed with $f")
-        as.shutdown()
-    }
+    res.onComplete(writeResults)
 
     as.awaitTermination()
   }
