@@ -1,4 +1,4 @@
-package com.pkinsky
+package com
 
 import scala.concurrent.duration._
 import scala.concurrent._
@@ -10,16 +10,15 @@ import akka.actor._
 import akka.stream.actor._
 import scalaz._
 import Scalaz._
-import Util._
 import java.io.File
 import java.nio.file.{Paths, Files}
 import org.reactivestreams.Subscriber
 import java.nio.charset.StandardCharsets
 
 
-object Util {
+package object pkinsky {
 
-  val tZero = System.currentTimeMillis()
+  private val tZero = System.currentTimeMillis()
 
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
