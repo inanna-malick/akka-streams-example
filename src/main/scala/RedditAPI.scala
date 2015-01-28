@@ -1,13 +1,10 @@
 package com.pkinsky
 
 import dispatch._
-import Util.timedFuture
 import scala.concurrent.duration._
 import scala.concurrent.{Future, ExecutionContext}
 import org.json4s.JsonAST.{JValue, JString}
 import scala.collection.immutable._
-
-import Util._
 
 object RedditAPI {
 

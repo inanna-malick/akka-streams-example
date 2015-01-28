@@ -8,7 +8,6 @@ import scala.language.postfixOps
 import scala.collection.immutable.{Vector, Seq}
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import Util._
 
 import scala.util.{Failure, Success}
 
