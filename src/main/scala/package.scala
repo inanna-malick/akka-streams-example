@@ -20,25 +20,28 @@ package object pkinsky {
 
   private val tZero = System.currentTimeMillis()
 
+  def printlnC(s: Any): Unit = println(Console.GREEN + s + Console.RESET)
+  def printlnE(s: Any): Unit = println(Console.RED + s + Console.RESET)
+
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
-    println(s"--> started $name at t0 + ${start - tZero}")
+    printlnC(s"--> started $name at t0 + ${start - tZero}")
     f.andThen{
       case Success(t) =>
         val end = System.currentTimeMillis()
-        println(s"\t<-- finished $name after ${end - start} millis")
+        printlnC(s"\t<-- finished $name after ${end - start} millis")
       case Failure(ex) =>
         val end = System.currentTimeMillis()
-        println(s"\t<X> failed $name, total time elapsed: ${end - start}\n$ex")
+        printlnE(s"\t<X> failed $name, total time elapsed: ${end - start}\n$ex")
     }
   }
 
   def withRetry[T](f: => Future[T], onFail: T, n: Int = 3)(implicit ec: ExecutionContext): Future[T] = 
     if (n > 0){ f.recoverWith{ case err: Exception => 
-      println(s"future failed with $err, retrying")
+      printlnE(s"future failed with $err, retrying")
       withRetry(f, onFail, n - 1)
     }} else{
-      println(s"WARNING: failed to run future, substituting $onFail")
+      printlnE(s"WARNING: failed to run future, substituting $onFail")
       Future.successful(onFail)
     }
 
@@ -62,14 +65,14 @@ package object pkinsky {
       clearOutputDir()
       wordcounts.foreach{ case (key, wordcount) =>
         val fname = s"res/$key.tsv"
-        println(s"write wordcount for $key to $fname")
+        printlnC(s"write wordcount for $key to $fname")
         writeTsv(fname, wordcount)
-        println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
+        printlnC(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
       }
       as.shutdown()
 
     case Failure(f) => 
-      println(s"failed with $f")
+      printlnE(s"failed with $f")
       as.shutdown()
   }
 }
