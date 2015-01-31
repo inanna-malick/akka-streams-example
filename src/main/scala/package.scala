@@ -20,25 +20,30 @@ package object pkinsky {
 
   private val tZero = System.currentTimeMillis()
 
+  private val errorColor = Console.RED
+  private val successColor = Console.CYAN
+
+  def printlnC(s: String): Unit = println(Console.CYAN + s + Console.RESET)
+
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
-    println(s"--> started $name at t0 + ${start - tZero}")
+    println(s"${Console.CYAN}--> started $name at t0 + ${start - tZero}${Console.RESET}")
     f.andThen{
       case Success(t) =>
         val end = System.currentTimeMillis()
-        println(s"\t<-- finished $name after ${end - start} millis")
+        println(s"\t${Console.CYAN}<-- finished $name after ${end - start} millis${Console.RESET}")
       case Failure(ex) =>
         val end = System.currentTimeMillis()
-        println(s"\t<X> failed $name, total time elapsed: ${end - start}\n$ex")
+        println(s"\t${Console.RED}<X> failed $name, total time elapsed: ${end - start}\n$ex${Console.RESET}")
     }
   }
 
   def withRetry[T](f: => Future[T], onFail: T, n: Int = 3)(implicit ec: ExecutionContext): Future[T] = 
     if (n > 0){ f.recoverWith{ case err: Exception => 
-      println(s"future failed with $err, retrying")
+      println(s"${Console.RED}future failed with $err, retrying${Console.RESET}")
       withRetry(f, onFail, n - 1)
     }} else{
-      println(s"WARNING: failed to run future, substituting $onFail")
+      println(s"${Console.RED}WARNING: failed to run future, substituting $onFail${Console.RESET}")
       Future.successful(onFail)
     }
 
@@ -62,14 +67,14 @@ package object pkinsky {
       clearOutputDir()
       wordcounts.foreach{ case (key, wordcount) =>
         val fname = s"res/$key.tsv"
-        println(s"write wordcount for $key to $fname")
+        println(s"${Console.CYAN}write wordcount for $key to $fname${Console.RESET}")
         writeTsv(fname, wordcount)
-        println(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
+        println(s"${Console.CYAN}${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key${Console.RESET}")
       }
       as.shutdown()
 
     case Failure(f) => 
-      println(s"failed with $f")
+      println(s"${Console.RED}failed with $f${Console.RESET}")
       as.shutdown()
   }
 }
