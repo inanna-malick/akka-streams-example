@@ -20,30 +20,28 @@ package object pkinsky {
 
   private val tZero = System.currentTimeMillis()
 
-  private val errorColor = Console.RED
-  private val successColor = Console.CYAN
-
-  def printlnC(s: String): Unit = println(Console.CYAN + s + Console.RESET)
+  def printlnC(s: Any): Unit = println(Console.GREEN + s + Console.RESET)
+  def printlnE(s: Any): Unit = println(Console.RED + s + Console.RESET)
 
   def timedFuture[T](name: String)(f: Future[T])(implicit ec: ExecutionContext): Future[T] = {
     val start = System.currentTimeMillis()
-    println(s"${Console.CYAN}--> started $name at t0 + ${start - tZero}${Console.RESET}")
+    printlnC(s"--> started $name at t0 + ${start - tZero}")
     f.andThen{
       case Success(t) =>
         val end = System.currentTimeMillis()
-        println(s"\t${Console.CYAN}<-- finished $name after ${end - start} millis${Console.RESET}")
+        printlnC(s"\t<-- finished $name after ${end - start} millis")
       case Failure(ex) =>
         val end = System.currentTimeMillis()
-        println(s"\t${Console.RED}<X> failed $name, total time elapsed: ${end - start}\n$ex${Console.RESET}")
+        printlnE(s"\t<X> failed $name, total time elapsed: ${end - start}\n$ex")
     }
   }
 
   def withRetry[T](f: => Future[T], onFail: T, n: Int = 3)(implicit ec: ExecutionContext): Future[T] = 
     if (n > 0){ f.recoverWith{ case err: Exception => 
-      println(s"${Console.RED}future failed with $err, retrying${Console.RESET}")
+      printlnE(s"future failed with $err, retrying")
       withRetry(f, onFail, n - 1)
     }} else{
-      println(s"${Console.RED}WARNING: failed to run future, substituting $onFail${Console.RESET}")
+      printlnE(s"WARNING: failed to run future, substituting $onFail")
       Future.successful(onFail)
     }
 
@@ -67,14 +65,14 @@ package object pkinsky {
       clearOutputDir()
       wordcounts.foreach{ case (key, wordcount) =>
         val fname = s"res/$key.tsv"
-        println(s"${Console.CYAN}write wordcount for $key to $fname${Console.RESET}")
+        printlnC(s"write wordcount for $key to $fname")
         writeTsv(fname, wordcount)
-        println(s"${Console.CYAN}${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key${Console.RESET}")
+        printlnC(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
       }
       as.shutdown()
 
     case Failure(f) => 
-      println(s"${Console.RED}failed with $f${Console.RESET}")
+      printlnE(s"failed with $f")
       as.shutdown()
   }
 }
