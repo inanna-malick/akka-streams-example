@@ -260,6 +260,18 @@ Not everything can be expressed as a linear sequence of stream processing steps.
  - Graphs can be complete or partial, with partial graphs having undefined sources, sinks or both.
  - Complete graphs can be run as-is. 
 
+First, here's the type signature of throttle: `def throttle[T](rate: FiniteDuration): Flow[T, T]`. The flow graph creation syntax can be a bit hard to follow, so to start here's a flowchart showing the structure of the stream processing step we're going to build.  
+```
+    +------------+
+    | tickSource +-Unit-+
+    +------------+      +---> +-----+            +-----+      +-----+
+                              | zip +-(T,Unit)-> | map +--T-> | out |
+    +----+              +---> +-----+            +-----+      +-----+
+    | in +----T---------+
+    +----+
+```
+
+And the code:
 ```
 def throttle[T](rate: FiniteDuration): Flow[T, T] = {
   val tickSource = TickSource(rate, rate, () => () )
