@@ -292,7 +292,7 @@ import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
 import scala.concurrent.duration._
-Source((1 to 5).toVector).via(throttle[Int](500 millis)).foreach{ n => printlnC(s"$n @ ${System.currentTimeMillis}")}
+Source((1 to 10).toVector).via(throttle[Int](500 millis)).foreach{ n => printlnC(s"$n @ ${System.currentTimeMillis}")}
 ```
 yields:
 ```
