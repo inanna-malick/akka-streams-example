@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 
-object WordCount {
+object Main {
   implicit val as = ActorSystem()
   implicit val ec = as.dispatcher
   val settings = MaterializerSettings(as)

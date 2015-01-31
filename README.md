@@ -95,7 +95,7 @@ val subreddits: Source[String] = Source(args.toVector)
 
 Try it out:
 ```
-import com.pkinsky.WordCount._
+import com.pkinsky.Main._
 import akka.stream.scaladsl._
 Source(Array("funny", "sad").toVector).foreach(println)
 ```
@@ -119,7 +119,7 @@ Try it out:
 ```
 import akka.stream.scaladsl._
 import com.pkinsky._
-import WordCount._
+import Main._
 Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(println)
 ```
 
@@ -155,8 +155,7 @@ This one's a bit harder to test. Instead of producing a stream of items that we 
 ```
 import akka.stream.scaladsl._
 import com.pkinsky._
-import Util._
-import WordCount._
+import Main._
 import scala.concurrent.Future
 val comments = Vector(Comment("news", "hello world"), 
                       Comment("news", "cruel world"), 
@@ -195,7 +194,7 @@ This Flow takes subreddit names and emits popular links for each supplied subred
 Let's test this out! Here we create a source using 4 subreddit names, pipe it through `fetchLinks`, and use foreach to consume and print each element emitted by the resulting `Source`.
 ```
 import akka.stream.scaladsl._
-import com.pkinsky.WordCount._
+import com.pkinsky.Main._
 Source(Vector("funny", "sad", "politics", "news")).via(fetchLinks).foreach(println)
 ```
 
@@ -238,7 +237,7 @@ Let's test this flow with one of the links outputted by the previous test.
 ```
 import akka.stream.scaladsl._
 import com.pkinsky._
-import WordCount._
+import Main._
 Source(Vector(Link("2ooscv","news"))).via(fetchComments).foreach(println)
 ```
 `Source(Vector(Link("2ooscv","news")))` emits a single link that maps to this article: [Illinois General Assembly passes bill to ban citizens from recording police](http://www.illinoispolicy.org/illinois-general-assembly-revives-recording-ban/). Piping that source through the `fetchComments` flow creates a Source[Comment] that fetches and emits the top comments on that link:
@@ -291,7 +290,7 @@ Let's test it out:
 ```
 import akka.stream.scaladsl._
 import com.pkinsky._
-import WordCount._
+import Main._
 import scala.concurrent.duration._
 Source((1 to 5).toVector).via(throttle[Int](500 millis)).foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
@@ -307,7 +306,7 @@ yields:
 Just for fun, let's remove the throttle:
 ```
 import akka.stream.scaladsl._
-import com.pkinsky.WordCount._
+import com.pkinsky.Main._
 Source((1 to 1000).toVector).foreach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
 Without the throttle, 1000 elements are consumed within 64 ms.
