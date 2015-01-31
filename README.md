@@ -155,7 +155,6 @@ This one's a bit harder to test. Instead of producing a stream of items that we 
 ```
 import akka.stream.scaladsl._
 import com.pkinsky._
-import Util._
 import Main._
 import scala.concurrent.Future
 val comments = Vector(Comment("news", "hello world"), 
