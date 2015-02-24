@@ -66,6 +66,8 @@ package object pkinsky {
       wordcounts.foreach{ case (key, wordcount) =>
         val fname = s"res/$key.tsv"
         printlnC(s"write wordcount for $key to $fname")
+        val p = Paths.get("res")
+        if (!Files.exists(p)) Files.createDirectory(p)
         writeTsv(fname, wordcount)
         printlnC(s"${wordcount.size} distinct words and ${wordcount.values.sum} total words for $key")
       }

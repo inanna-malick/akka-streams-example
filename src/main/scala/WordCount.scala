@@ -15,8 +15,8 @@ import scala.util.{Failure, Success}
 object Main {
   implicit val as = ActorSystem()
   implicit val ec = as.dispatcher
-  val settings = MaterializerSettings(as)
-  implicit val mat = FlowMaterializer(settings)
+  val settings = ActorFlowMaterializerSettings(as)
+  implicit val mat = ActorFlowMaterializer(settings)
 
   val redditAPIRate = 500 millis
 
@@ -33,7 +33,7 @@ object Main {
     input stream, so the resulting stream can never emit more than 1 element per `rate` time units.
    */
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
-    val tickSource = TickSource(rate, rate, () => () )
+    val tickSource = TickSource(rate, rate, () )
     val zip = Zip[T, Unit]
     val in = UndefinedSource[T]
     val out = UndefinedSink[(T, Unit)]
