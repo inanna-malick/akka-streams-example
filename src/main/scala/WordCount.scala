@@ -1,22 +1,19 @@
 package com.pkinsky
 
 import akka.actor.ActorSystem
-import akka.stream.scaladsl._
 import akka.stream._
-import akka.stream.actor._
-import scala.language.postfixOps
-import scala.collection.immutable.{Vector, Seq}
-import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future}
+import akka.stream.scaladsl._
 
-import scala.util.{Failure, Success}
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.language.postfixOps
 
 
 object Main {
   implicit val as = ActorSystem()
+  implicit val mat = ActorFlowMaterializer()
   implicit val ec = as.dispatcher
-  val settings = MaterializerSettings(as)
-  implicit val mat = FlowMaterializer(settings)
+
 
   val redditAPIRate = 500 millis
 
@@ -33,12 +30,12 @@ object Main {
     input stream, so the resulting stream can never emit more than 1 element per `rate` time units.
    */
   def throttle[T](rate: FiniteDuration): Flow[T, T] = {
-    val tickSource = TickSource(rate, rate, () => () )
-    val zip = Zip[T, Unit]
+    val tickSource = Source(rate, rate, () => ())
+    val zip = Zip[T, () => Unit]
     val in = UndefinedSource[T]
-    val out = UndefinedSink[(T, Unit)]
+    val out = UndefinedSink[(T, () => Unit)]
     PartialFlowGraph{ implicit builder =>
-      import FlowGraphImplicits._
+      import akka.stream.scaladsl.FlowGraphImplicits._
       in ~> zip.left
       tickSource ~> zip.right
       zip.out ~> out
