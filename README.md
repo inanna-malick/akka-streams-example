@@ -97,7 +97,7 @@ Try it out:
 ```
 import com.pkinsky.Main._
 import akka.stream.scaladsl._
-Source(Array("funny", "sad").toVector).foreach(printlnC)
+Source(Array("funny", "sad").toVector).runForeach(println)
 ```
 As expected:
 ```
@@ -120,7 +120,7 @@ Try it out:
 import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
-Source(RedditAPI.popularSubreddits).mapConcat(identity).foreach(printlnC)
+Source(RedditAPI.popularSubreddits).mapConcat(identity).runForeach(println)
 ```
 
 This outputs:
@@ -161,7 +161,7 @@ val comments = Vector(Comment("news", "hello world"),
                       Comment("news", "cruel world"), 
                       Comment("funny", "hello world"))
 val f: Future[Map[String, WordCount]] = Source(comments).runWith(wordCountSink)
-f.onComplete(printlnC)
+f.onComplete(println)
 ```
 
 The future completes succesfully when the Sink finishes processing the last element produced by the Source, resulting in:
@@ -191,11 +191,11 @@ This Flow takes subreddit names and emits popular links for each supplied subred
     .mapConcat( listing => listing.links )
 ```
 
-Let's test this out! Here we create a source using 4 subreddit names, pipe it through `fetchLinks`, and use foreach to consume and print each element emitted by the resulting `Source`.
+Let's test this out! Here we create a source using 4 subreddit names, pipe it through `fetchLinks`, and use runForeach to consume and print each element emitted by the resulting `Source`.
 ```
 import akka.stream.scaladsl._
 import com.pkinsky.Main._
-Source(Vector("funny", "sad", "politics", "news")).via(fetchLinks).foreach(printlnC)
+Source(Vector("funny", "sad", "politics", "news")).via(fetchLinks).runForeach(println)
 ```
 
 This outputs:
@@ -238,7 +238,7 @@ Let's test this flow with one of the links outputted by the previous test.
 import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
-Source(Vector(Link("2ooscv","news"))).via(fetchComments).foreach(printlnC)
+Source(Vector(Link("2ooscv","news"))).via(fetchComments).runForeach(println)
 ```
 `Source(Vector(Link("2ooscv","news")))` emits a single link that maps to this article: [Illinois General Assembly passes bill to ban citizens from recording police](http://www.illinoispolicy.org/illinois-general-assembly-revives-recording-ban/). Piping that source through the `fetchComments` flow creates a Source[Comment] that fetches and emits the top comments on that link:
 
@@ -292,7 +292,7 @@ import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
 import scala.concurrent.duration._
-Source((1 to 10).toVector).via(throttle[Int](500 millis)).foreach{ n => printlnC(s"$n @ ${System.currentTimeMillis}")}
+Source((1 to 10).toVector).via(throttle[Int](500 millis)).runForeach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
 yields:
 ```
@@ -307,7 +307,7 @@ Just for fun, let's remove the throttle:
 ```
 import akka.stream.scaladsl._
 import com.pkinsky.Main._
-Source((1 to 1000).toVector).foreach{ n => printlnC(s"$n @ ${System.currentTimeMillis}")}
+Source((1 to 1000).toVector).runForeach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
 Without the throttle, 1000 elements are consumed within 64 ms.
 ```
