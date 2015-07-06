@@ -30,7 +30,7 @@ What's cool is that since data and demand travel in opposite directions, merging
 The Code
 --------
 RS is defined by the following minimal, heavily tested, set of interfaces.
-```
+```Scala
 trait Publisher[T] {
   def subscribe(s: Subscriber[T]): Unit
 }
@@ -69,7 +69,7 @@ You can skip this paragraph if you're already familiar with Scala's Future class
 
 **Reddit API**:
 
-```
+```Scala
 type WordCount = Map[String, Int]i
 case class LinkListing(links: Seq[Link])
 case class Link(id: String, subreddit: String)
@@ -89,12 +89,12 @@ Sources
 An instance of the type `Source[Out]` produces a potentially unbounded stream of elements of type `Out`. We'll start by creating a stream of subreddit names, represented as Strings.
 
 Sources can be created from Vectors (an indexed sequence roughly equivalent to an Array).
-```
+```Scala
 val subreddits: Source[String] = Source(args.toVector)
 ```
 
 Try it out:
-```
+```Scala
 import com.pkinsky.Main._
 import akka.stream.scaladsl._
 Source(Array("funny", "sad").toVector).runForeach(println)
@@ -108,7 +108,7 @@ sad
 
 Single-element sources can also be created from Futures, resulting in a Source that emits the result of the future if it succeeds or fails if the future fails.
 
-```
+```Scala
 val subreddits: Source[String] = Source(RedditAPI.popularSubreddits).mapConcat(identity)
 ```
 
@@ -116,7 +116,7 @@ Since `popularSubreddits` creates a `Future[Seq[String]]`, we take the additiona
 
 
 Try it out:
-```
+```Scala
 import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
@@ -143,7 +143,7 @@ A `Sink[In]` consumes elements of type `In`. Some sinks produce values on comple
 
 This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a `Map[String, WordCount]` that can be retrieved on stream completion
 
-```
+```Scala
 val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
   FoldSink(Map.empty[String, WordCount])(
     (acc: Map[String, WordCount], c: Comment) =>
@@ -152,7 +152,7 @@ val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
 ```
 
 This one's a bit harder to test. Instead of producing a stream of items that we can consume and print, it consumes comments and folds them together to produce a single value.  
-```
+```Scala
 import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
@@ -183,7 +183,7 @@ This Flow takes subreddit names and emits popular links for each supplied subred
     + mapAsyncUnordered is used here because we don't care about preserving ordering. It emits elements as soon as their Future completes, which keeps the occasional long-running call from blocking the entire stream.
 - Finally, we use mapConcat to flatten the resulting stream of LinkListings into a stream of Links.
 
-```
+```Scala
   val fetchLinks: Flow[String, Link] =
     Flow[String]
     .via(throttle(redditAPIRate))
@@ -192,7 +192,7 @@ This Flow takes subreddit names and emits popular links for each supplied subred
 ```
 
 Let's test this out! Here we create a source using 4 subreddit names, pipe it through `fetchLinks`, and use runForeach to consume and print each element emitted by the resulting `Source`.
-```
+```Scala
 import akka.stream.scaladsl._
 import com.pkinsky.Main._
 Source(Vector("funny", "sad", "politics", "news")).via(fetchLinks).runForeach(println)
@@ -225,7 +225,7 @@ Note how about 500 milliseconds elapse between each fetch links call (193, 486, 
 
 
 This flow uses the same sequence of steps (with a different API call) to convert a stream of links into a stream of the most popular comments on those links.
-```
+```Scala
 val fetchComments: Flow[Link, Comment] =
   Flow[Link]
     .via(throttle(redditAPIRate))
@@ -234,7 +234,7 @@ val fetchComments: Flow[Link, Comment] =
 ```
 
 Let's test this flow with one of the links outputted by the previous test. 
-```
+```Scala
 import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
@@ -271,7 +271,7 @@ First, here's the type signature of throttle: `def throttle[T](rate: FiniteDurat
 ```
 
 And the code:
-```
+```Scala
 def throttle[T](rate: FiniteDuration): Flow[T, T] = {
   val tickSource = TickSource(rate, rate, () => () )
   val zip = Zip[T, Unit]
@@ -287,7 +287,7 @@ def throttle[T](rate: FiniteDuration): Flow[T, T] = {
 ```
 
 Let's test it out:
-```
+```Scala
 import akka.stream.scaladsl._
 import com.pkinsky._
 import Main._
@@ -304,7 +304,7 @@ yields:
 ```
 
 Just for fun, let's remove the throttle:
-```
+```Scala
 import akka.stream.scaladsl._
 import com.pkinsky.Main._
 Source((1 to 1000).toVector).runForeach{ n => println(s"$n @ ${System.currentTimeMillis}")}
@@ -319,7 +319,7 @@ Without the throttle, 1000 elements are consumed within 64 ms.
 
 Finally, we combine these steps to create a description of a stream processing graph, which we materialize and run with .runWith().
 
-```
+```Scala
 val res: Future[Map[String, WordCount]] =
   subreddits
     .via(fetchLinks)
