@@ -11,8 +11,8 @@ import scala.concurrent.Future
 object Main {
   implicit val as = ActorSystem()
   implicit val ec = as.dispatcher
-  val settings = ActorFlowMaterializerSettings(as)
-  implicit val mat = ActorFlowMaterializer(settings)
+  val settings = ActorMaterializerSettings(as)
+  implicit val mat = ActorMaterializer(settings)
 
   val redditAPIRate = 500 millis
 
@@ -40,14 +40,14 @@ object Main {
   val fetchLinks: Flow[String, Link, Unit] =
     Flow[String]
         .via(throttle(redditAPIRate))
-        .mapAsyncUnordered( subreddit => RedditAPI.popularLinks(subreddit) )
+        .mapAsyncUnordered(2)( subreddit => RedditAPI.popularLinks(subreddit) )
         .mapConcat( listing => listing.links )
 
 
   val fetchComments: Flow[Link, Comment, Unit] =
     Flow[Link]
         .via(throttle(redditAPIRate))
-        .mapAsyncUnordered( link => RedditAPI.popularComments(link) )
+        .mapAsyncUnordered(2)( link => RedditAPI.popularComments(link) )
         .mapConcat( listing => listing.comments )
 
   val wordCountSink: Sink[Comment, Future[Map[String, WordCount]]] =
@@ -55,6 +55,9 @@ object Main {
       (acc: Map[String, WordCount], c: Comment) => 
         mergeWordCounts(acc, Map(c.subreddit -> c.toWordCount))
     )
+
+  import akka.stream.stage._
+
 
 def main(args: Array[String]): Unit = {
     // 0) Create a Flow of String names, using either
