@@ -145,7 +145,7 @@ This sink takes a stream of comments, converts them into (subreddit, wordcount) 
 
 ```Scala
 val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
-  FoldSink(Map.empty[String, WordCount])(
+  Sink.fold(Map.empty[String, WordCount])(
     (acc: Map[String, WordCount], c: Comment) =>
       mergeWordCounts(acc, Map(c.subreddit -> c.toWordCount))
   )
