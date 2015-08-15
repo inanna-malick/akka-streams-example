@@ -144,6 +144,8 @@ A `Sink[In]` consumes elements of type `In`. Some sinks produce values on comple
 This sink takes a stream of comments, converts them into (subreddit, wordcount) pairs, and merges those pairs into a `Map[String, WordCount]` that can be retrieved on stream completion
 
 ```Scala
+import scala.concurrent.Future
+import akka.stream.scaladsl._
 val wordCountSink: Sink[Comment, Future[Map[String, WordCount]]] =
   Sink.fold(Map.empty[String, WordCount])(
     (acc: Map[String, WordCount], c: Comment) =>
