@@ -70,7 +70,7 @@ You can skip this paragraph if you're already familiar with Scala's Future class
 **Reddit API**:
 
 ```Scala
-type WordCount = Map[String, Int]i
+type WordCount = Map[String, Int]
 case class LinkListing(links: Seq[Link])
 case class Link(id: String, subreddit: String)
 case class CommentListing(subreddit: String, comments: Seq[Comment])
