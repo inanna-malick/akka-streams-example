@@ -6,7 +6,16 @@ import scala.concurrent.{Future, ExecutionContext}
 import org.json4s.JsonAST.{JValue, JString}
 import scala.collection.immutable._
 
-object RedditAPI {
+trait RedditAPI {
+
+  def popularLinks(subreddit: String)(implicit ec: ExecutionContext): Future[LinkListing]
+
+  def popularComments(link: Link)(implicit ec: ExecutionContext): Future[CommentListing]
+
+  def popularSubreddits(implicit ec: ExecutionContext): Future[Seq[String]]
+}
+
+class RedditAPIImpl extends RedditAPI {
 
   val linksToFetch = 15
   val subredditsToFetch = 5
@@ -39,6 +48,7 @@ object RedditAPI {
     }
 }
 
+/*
 object SimpleExample {
   import RedditAPI._
   import ExecutionContext.Implicits.global
@@ -52,7 +62,7 @@ object SimpleExample {
       comments = commentListings.flatMap(_.comments)
     } yield comments
 }
-
+*/
 
 object LinkListing {
   def fromJson(subreddit: String)(json: JValue) = {
