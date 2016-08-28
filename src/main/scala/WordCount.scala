@@ -11,15 +11,16 @@ import scala.concurrent.Future
 import play.api.libs.json.{Reads, Writes, Json}
 import akka.http.scaladsl.model.ws._
 import akka.http.scaladsl.model._
+import scala.concurrent.ExecutionContext
+import akka.http.scaladsl.server.Route
 
-class WordCounter(redditAPI: RedditAPI) {
-  implicit val as = ActorSystem()
-  implicit val ec = as.dispatcher
-  val settings = ActorMaterializerSettings(as)
-  implicit val mat = ActorMaterializer(settings)
+trait WordCounter {
+  def popularCommentPipeline(implicit ec: ExecutionContext): Flow[String, Comment, NotUsed]
+}
 
+class WordCounterImpl(redditAPI: RedditAPI) extends WordCounter {
+  //todo: config class?
   val mapAsyncParallelism = 3
-
   val redditAPIRate = 500 millis
 
   /**
@@ -27,7 +28,7 @@ class WordCounter(redditAPI: RedditAPI) {
    
     builds the following stream-processing graph.
     +------------+
-    | tickSource +-Unit-+
+    | tickSource +-Unit-+import scala.concurrent.ExecutionContext.Implicits.global.
     +------------+      +---> +-----+            +-----+      +-----+
                               | zip +-(T,Unit)-> | map +--T-> | out |
     +----+              +---> +-----+            +-----+      +-----+
@@ -45,18 +46,19 @@ class WordCounter(redditAPI: RedditAPI) {
     }).map(_._1)
   }
 
-  val fetchLinks: Flow[String, Link, NotUsed] =
+  def fetchLinks(implicit ec: ExecutionContext): Flow[String, Link, NotUsed] =
     Flow[String]
         .via(throttle(redditAPIRate))
         .mapAsyncUnordered(mapAsyncParallelism)( subreddit => redditAPI.popularLinks(subreddit) )
         .mapConcat( listing => listing.links )
 
 
-  val fetchComments: Flow[Link, Comment, NotUsed] =
+  def fetchComments(implicit ec: ExecutionContext): Flow[Link, Comment, NotUsed] = {
     Flow[Link]
         .via(throttle(redditAPIRate))
         .mapAsyncUnordered(mapAsyncParallelism)( link => redditAPI.popularComments(link) )
         .mapConcat( listing => listing.comments )
+  }
 
   val wordCountSink: Sink[Comment, Future[Map[String, WordCount]]] =
     Sink.fold(Map.empty[String, WordCount])(
@@ -65,15 +67,21 @@ class WordCounter(redditAPI: RedditAPI) {
     )
 
 
-  val popularCommentPipeline: Flow[String, Comment, NotUsed] = 
+  def popularCommentPipeline(implicit ec: ExecutionContext): Flow[String, Comment, NotUsed] = 
     Flow[String]
       .via(fetchLinks)
       .via(fetchComments)
 
+}
 
+trait RedditServer {
+  def websocketRoute(implicit ec: ExecutionContext): Route
+}
+
+class RedditServerImpl(redditAPI: RedditAPI, wordCounter: WordCounterImpl) extends RedditServer {
   //todo: handle popular subreddits along w/ provided list
   //todo: handle non-strict non-text msg cases?
-  def websocketHandler(subreddits: immutable.Iterable[String]): Flow[Message, Message, NotUsed] = {
+  def websocketHandler(subreddits: immutable.Iterable[String])(implicit ec: ExecutionContext): Flow[Message, Message, NotUsed] = {
     val subredditSrc = if (subreddits.isEmpty)
         Source.fromFuture(redditAPI.popularSubreddits).map(WordCountRequest.apply)
       else
@@ -83,13 +91,13 @@ class WordCounter(redditAPI: RedditAPI) {
       .via(JsonUtils.decode[WordCountRequest])
       .prepend(subredditSrc)
       .mapConcat(_.subreddits)
-      .via(popularCommentPipeline)
+      .via(wordCounter.popularCommentPipeline)
       .map(c => WordCountResponse(error = None, result = Some(WordCountResult(c.subreddit, c.toWordCount))))
       .via(JsonUtils.encode[WordCountResponse])
 
   }
 
-  val websocketRoute = {
+  def websocketRoute(implicit ec: ExecutionContext): Route = {
     import akka.http.scaladsl.server.Directives._
 
     path("wordcount") {
@@ -98,7 +106,18 @@ class WordCounter(redditAPI: RedditAPI) {
       }
     }
   }
+}
 
+
+object Main {
+  implicit val as = ActorSystem()
+  implicit val ec = as.dispatcher
+  val settings = ActorMaterializerSettings(as)
+  implicit val mat = ActorMaterializer(settings)
+
+  val redditAPI: RedditAPI = new RedditAPIImpl()
+  val wordCounter: WordCounterImpl = new WordCounterImpl(redditAPI) //todo: use WordCounter trait here
+  val redditServer: RedditServer = new RedditServerImpl(redditAPI, wordCounter)
 
   def run(subreddits: Iterable[String]): Unit = {
     // 0) Create a Flow of String names, using either
@@ -111,21 +130,17 @@ class WordCounter(redditAPI: RedditAPI) {
   
     val res: Future[Map[String, WordCount]] =
       subredditSrc
-      .via(popularCommentPipeline)
-      .runWith(wordCountSink)
+      .via(wordCounter.popularCommentPipeline)
+      .runWith(wordCounter.wordCountSink)
 
     res.onComplete(writeResults)
 
     as.awaitTermination()
   }
-}
 
-object Main {
-  val redditAPI: RedditAPI = new RedditAPIImpl()
-  val wordCount: WordCounter = new WordCounter(redditAPI)
 
   def main(args: Array[String]): Unit = {
-    wordCount.run(args)
+    run(args)
   }
 }
 
