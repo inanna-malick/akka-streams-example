@@ -80,6 +80,7 @@ case class Comment(subreddit: String, body: String){
 
   def toWordCount: WordCount =
     normalize(body.split(" ").to[Seq])
+      .filterNot(_.contains("http"))
       .groupBy(identity)
       .mapValues(_.length)
 }
