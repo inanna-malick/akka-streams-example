@@ -16,6 +16,7 @@ object WordCountResult{
 }
 
 
+//Either[String, WordCountResult] would be better, but this serializes more cleanly
 case class WordCountResponse(error: Option[String], result: Option[WordCountResult])
 
 object WordCountResponse{
