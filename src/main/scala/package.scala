@@ -58,6 +58,7 @@ package object pkinsky {
 
   type WordCount = Map[String, Int]
 
+  def mergeWordCounts1(a: WordCount, b:WordCount) = a |+| b //todo: change name w/ idea refactor
   def mergeWordCounts(a: Map[String, WordCount], b: Map[String, WordCount]) = a |+| b
 
   def writeResults(wordcounts: Try[Map[String, WordCount]])(implicit as: ActorSystem) = wordcounts match {

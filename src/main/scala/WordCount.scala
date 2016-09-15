@@ -14,6 +14,23 @@ import akka.http.scaladsl.model._
 import scala.concurrent.ExecutionContext
 import akka.http.scaladsl.server.Route
 
+import scala.util.Failure
+
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.{HttpResponse, HttpRequest}
+import akka.http.scaladsl.model.ws.{TextMessage, Message}
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.PathMatchers.PathEnd
+import akka.stream._
+import akka.stream.scaladsl._
+import play.api.libs.json.Json
+import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.duration._
+import scala.util.Success
+import scala.language.postfixOps
+
+
+
 trait WordCounter {
   def popularCommentPipeline(implicit ec: ExecutionContext): Flow[String, Comment, NotUsed]
 }
@@ -79,6 +96,8 @@ trait RedditServer {
 }
 
 class RedditServerImpl(redditAPI: RedditAPI, wordCounter: WordCounterImpl) extends RedditServer {
+
+
   //todo: handle popular subreddits along w/ provided list
   //todo: handle non-strict non-text msg cases?
   def websocketHandler(subreddits: immutable.Iterable[String])(implicit ec: ExecutionContext): Flow[Message, Message, NotUsed] = {
@@ -92,7 +111,18 @@ class RedditServerImpl(redditAPI: RedditAPI, wordCounter: WordCounterImpl) exten
       .prepend(subredditSrc)
       .mapConcat(_.subreddits)
       .via(wordCounter.popularCommentPipeline)
-      .map(c => WordCountResponse(error = None, result = Some(WordCountResult(c.subreddit, c.toWordCount))))
+      .groupedWithin(200, 5 seconds)
+      .mapConcat{ xs => //todo: cleanup, ugggly
+        val groups: immutable.Map[String, immutable.Seq[WordCount]] = xs.groupBy(_.subreddit).mapValues(_.map(_.toWordCount))
+
+        val wordcounts: Map[String, WordCount] = groups.mapValues(_.foldLeft(Map.empty[String, Int])(mergeWordCounts1(_,_)))
+
+        wordcounts.map{ case (s, wc) => WordCountResponse(error = None, result = Some(WordCountResult(s, wc))) }
+      }
+        .map{ x =>
+         println("send msg : " + x)
+         x
+        }
       .via(JsonUtils.encode[WordCountResponse])
 
   }
@@ -119,7 +149,7 @@ object Main {
   val wordCounter: WordCounterImpl = new WordCounterImpl(redditAPI) //todo: use WordCounter trait here
   val redditServer: RedditServer = new RedditServerImpl(redditAPI, wordCounter)
 
-  def run(subreddits: Iterable[String]): Unit = {
+  def runFile(subreddits: Iterable[String]): Unit = {
     // 0) Create a Flow of String names, using either
     //    the argument vector or the result of an API call.
     val subredditSrc: Source[String, NotUsed] =
@@ -138,9 +168,19 @@ object Main {
     as.awaitTermination()
   }
 
+  def runServer(port: Int): Unit = {
+    
+    Http()
+      .bindAndHandle(redditServer.websocketRoute, "localhost", port)
+     .andThen{ case Failure(t) => println(s"error binding to localhost:$port, $t")}
+
+     Console.readLine()
+     as.shutdown()
+  }
 
   def main(args: Array[String]): Unit = {
-    run(args)
+    //runFile(args)
+    runServer(9000)
   }
 }
 

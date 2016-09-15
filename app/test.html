@@ -4,6 +4,7 @@
   <script src="http://d3js.org/d3.v3.min.js"></script>
   <script src="https://rawgit.com/jasondavies/d3-cloud/master/build/d3.layout.cloud.js"></script>
   <script>
+//todo: make deps (d3, cloud layout) local
 
 //Simple animated example of d3-cloud - https://github.com/jasondavies/d3-cloud
 //Based on https://github.com/jasondavies/d3-cloud/blob/master/examples/simple.html
@@ -32,7 +33,7 @@ function wordCloud(selector) {
             .style("font-family", "Impact")
             .style("fill", function(d, i) { return fill(i); })
             .attr("text-anchor", "middle")
-            .attr('font-size', 1)
+            .attr('font-size', 10)
             .text(function(d) { return d.text; });
 
         //Entering and existing words
@@ -81,7 +82,19 @@ function wordCloud(selector) {
 var words = {};
 
 function showNewWords(vis) {
-    vis.update(words)
+
+  var wordlist = [];
+  for (k in words){
+      if (words.hasOwnProperty(k)) {
+	 wordlist.push(words[k]);
+      }
+  }
+  
+
+  //wordlist = wordlist.sort(function(a, b){return a.size-b.size}).slice(0, 10);
+
+
+  vis.update(wordlist)
 }
 
 //Create a new instance of the word cloud visualisation.
@@ -100,27 +113,36 @@ function addWord(word, count) {
 }
 
 
-var webSocket = new WebSocket("ws://localhost:9000/reddit/wc");
+var webSocket = new WebSocket("ws://localhost:9000/wordcount?subreddit=funny&subreddit=askreddit");
 
 
 webSocket.onopen = function(event){
   console.log(event);
-  //read event
-  //if error, alert w/ error (temp)
-  //if success, call addWord with each pair
-
-  //yolo
-  var res = event.data.result.wordcounts;
-    
-  for (var k in res){
-      if (res.hasOwnProperty(k)) {
-	 addWord(k, target[k]);
-      }
-  }
 };
 
+//var x = 0;
+
+//note to self: fuck this noise, implement simple top 20 word count and update each tick
+
 webSocket.onmessage = function(event){
-  console.log(event);
+  //console.log(event);
+
+  //yolo
+  var res = JSON.parse(event.data).result.wordcounts;
+    
+  if (typeof res !== 'undefined') {
+    for (k in res) {
+      //console.log("add (" + k + ", " + res[k] + ")");
+      addWord(k, res[k]);
+    }
+  }
+
+  //x = (x + 1) % 100;
+  //if (x === 0) {
+    console.log("word map dump");
+    console.log(words);
+    showNewWords(myWordCloud);
+  //}
 };
 
 webSocket.onclose = function(event){
