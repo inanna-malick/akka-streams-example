@@ -43,7 +43,7 @@ trait Subscriber[T] {
 }
 
 trait Subscription {
-   def request(n: Unit): Unit
+   def request(n: Int): Unit
    def cancel(): Unit
 }
 ```
