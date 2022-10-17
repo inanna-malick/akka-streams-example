@@ -1,4 +1,4 @@
-package com.pkinsky
+package com.inanna-malick
 
 import dispatch._
 import scala.concurrent.duration._

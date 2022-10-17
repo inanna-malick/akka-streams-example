@@ -16,7 +16,7 @@ import org.reactivestreams.Subscriber
 import java.nio.charset.StandardCharsets
 
 
-package object pkinsky {
+package object inanna-malick {
 
   private val tZero = System.currentTimeMillis()
 

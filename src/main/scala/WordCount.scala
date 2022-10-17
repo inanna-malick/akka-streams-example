@@ -1,4 +1,4 @@
-package com.pkinsky
+package com.inanna-malick
 
 import akka.actor.ActorSystem
 import akka.stream.scaladsl._

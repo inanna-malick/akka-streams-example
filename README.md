@@ -95,7 +95,7 @@ val subreddits: Source[String] = Source(args.toVector)
 
 Try it out:
 ```Scala
-import com.pkinsky.Main._
+import com.inanna-malick.Main._
 import akka.stream.scaladsl._
 Source(Array("funny", "sad").toVector).runForeach(println)
 ```
@@ -118,7 +118,7 @@ Since `popularSubreddits` creates a `Future[Seq[String]]`, we take the additiona
 Try it out:
 ```Scala
 import akka.stream.scaladsl._
-import com.pkinsky._
+import com.inanna-malick._
 import Main._
 Source(RedditAPI.popularSubreddits).mapConcat(identity).runForeach(println)
 ```
@@ -154,7 +154,7 @@ val wordCountSink: FoldSink[Map[String, WordCount], Comment] =
 This one's a bit harder to test. Instead of producing a stream of items that we can consume and print, it consumes comments and folds them together to produce a single value.  
 ```Scala
 import akka.stream.scaladsl._
-import com.pkinsky._
+import com.inanna-malick._
 import Main._
 import scala.concurrent.Future
 val comments = Vector(Comment("news", "hello world"), 
@@ -194,7 +194,7 @@ This Flow takes subreddit names and emits popular links for each supplied subred
 Let's test this out! Here we create a source using 4 subreddit names, pipe it through `fetchLinks`, and use runForeach to consume and print each element emitted by the resulting `Source`.
 ```Scala
 import akka.stream.scaladsl._
-import com.pkinsky.Main._
+import com.inanna-malick.Main._
 Source(Vector("funny", "sad", "politics", "news")).via(fetchLinks).runForeach(println)
 ```
 
@@ -236,7 +236,7 @@ val fetchComments: Flow[Link, Comment] =
 Let's test this flow with one of the links outputted by the previous test. 
 ```Scala
 import akka.stream.scaladsl._
-import com.pkinsky._
+import com.inanna-malick._
 import Main._
 Source(Vector(Link("2ooscv","news"))).via(fetchComments).runForeach(println)
 ```
@@ -289,7 +289,7 @@ def throttle[T](rate: FiniteDuration): Flow[T, T] = {
 Let's test it out:
 ```Scala
 import akka.stream.scaladsl._
-import com.pkinsky._
+import com.inanna-malick._
 import Main._
 import scala.concurrent.duration._
 Source((1 to 10).toVector).via(throttle[Int](500 millis)).runForeach{ n => println(s"$n @ ${System.currentTimeMillis}")}
@@ -306,7 +306,7 @@ yields:
 Just for fun, let's remove the throttle:
 ```Scala
 import akka.stream.scaladsl._
-import com.pkinsky.Main._
+import com.inanna-malick.Main._
 Source((1 to 1000).toVector).runForeach{ n => println(s"$n @ ${System.currentTimeMillis}")}
 ```
 Without the throttle, 1000 elements are consumed within 64 ms.
